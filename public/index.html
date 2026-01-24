@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Web Messenger</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="top-bar">
+        <div>
+          <h1>Web Messenger</h1>
+          <p class="subtitle">Realtime chat powered by Socket.IO</p>
+        </div>
+        <div class="status">
+          <span id="connection-status" class="status-pill">Connecting...</span>
+          <button id="change-name" class="ghost-button" type="button">
+            Change name
+          </button>
+        </div>
+      </header>
+
+      <main class="chat">
+        <ul id="messages" class="messages"></ul>
+      </main>
+
+      <form id="message-form" class="composer" autocomplete="off">
+        <input
+          id="message-input"
+          type="text"
+          placeholder="Type a message..."
+          maxlength="500"
+          required
+        />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+
+    <div id="join-overlay" class="overlay">
+      <form id="join-form" class="join-card">
+        <h2>Join the chat</h2>
+        <p>Pick a display name to start messaging.</p>
+        <input
+          id="username"
+          type="text"
+          placeholder="Your name"
+          maxlength="32"
+          required
+        />
+        <button type="submit">Enter chat</button>
+      </form>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "messenger-website",
+  "version": "1.0.0",
+  "description": "Realtime web messenger with Socket.IO",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emmaa271781-crypto/Webapp.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/emmaa271781-crypto/Webapp/issues"
+  },
+  "homepage": "https://github.com/emmaa271781-crypto/Webapp#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}
