@@ -1,4 +1,4 @@
-# Classroom Chat
+# Classroom CS
 
 A lightweight realtime web messenger built with Express and Socket.IO. The
 project is ready for Railway hosting and will redeploy automatically whenever
@@ -11,6 +11,7 @@ you push updates to GitHub.
 - Message history (last 100 messages in memory)
 - Railway-friendly `npm start` entry point
 - Password gate (default: `0327`)
+- Emoji shortcuts and GIF links
 
 ## Run locally
 

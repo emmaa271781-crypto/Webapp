@@ -9,6 +9,12 @@ const joinForm = document.getElementById("join-form");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const joinError = document.getElementById("join-error");
+const gifToggle = document.getElementById("gif-toggle");
+const gifPanel = document.getElementById("gif-panel");
+const gifInput = document.getElementById("gif-input");
+const gifSend = document.getElementById("gif-send");
+const gifError = document.getElementById("gif-error");
+const emojiButtons = document.querySelectorAll(".emoji-button");
 
 let currentUser = "";
 
@@ -26,6 +32,14 @@ const formatTime = (isoString) => {
     return "";
   }
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const isGifUrl = (value) => {
+  const text = String(value || "").trim();
+  if (!/^https?:\/\//i.test(text)) {
+    return false;
+  }
+  return /\.gif(\?|#|$)/i.test(text);
 };
 
 const scrollToBottom = () => {
@@ -63,7 +77,17 @@ const addChatMessage = (message) => {
 
   const text = document.createElement("p");
   text.className = "message-text";
-  text.textContent = message.text;
+  const messageText = String(message.text || "");
+  if (isGifUrl(messageText)) {
+    const image = document.createElement("img");
+    image.className = "message-gif";
+    image.src = messageText;
+    image.alt = "GIF";
+    image.loading = "lazy";
+    text.appendChild(image);
+  } else {
+    text.textContent = messageText;
+  }
 
   item.appendChild(meta);
   item.appendChild(text);
@@ -76,6 +100,11 @@ const setJoinError = (message) => {
   joinError.style.display = message ? "block" : "none";
 };
 
+const setGifError = (message) => {
+  gifError.textContent = message;
+  gifError.style.display = message ? "block" : "none";
+};
+
 const openOverlay = () => {
   overlay.classList.add("show");
   usernameInput.focus();
@@ -83,6 +112,39 @@ const openOverlay = () => {
 
 const closeOverlay = () => {
   overlay.classList.remove("show");
+};
+
+const openGifPanel = () => {
+  gifPanel.classList.add("show");
+  gifInput.focus();
+};
+
+const closeGifPanel = () => {
+  gifPanel.classList.remove("show");
+  setGifError("");
+};
+
+const sendGif = () => {
+  const url = gifInput.value.trim();
+  if (!currentUser) {
+    setJoinError("Enter name and password to join.");
+    openOverlay();
+    return;
+  }
+  if (!url) {
+    setGifError("Paste a GIF URL.");
+    gifInput.focus();
+    return;
+  }
+  if (!isGifUrl(url)) {
+    setGifError("GIF URL must end with .gif");
+    gifInput.focus();
+    return;
+  }
+  setGifError("");
+  socket.emit("message", { text: url });
+  gifInput.value = "";
+  closeGifPanel();
 };
 
 joinForm.addEventListener("submit", (event) => {
@@ -103,8 +165,39 @@ joinForm.addEventListener("submit", (event) => {
   socket.emit("join", { username: name.slice(0, 32), password });
 });
 
+emojiButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    const emoji = button.dataset.emoji || button.textContent;
+    input.value = `${input.value}${emoji}`;
+    input.focus();
+  });
+});
+
+gifToggle.addEventListener("click", () => {
+  if (gifPanel.classList.contains("show")) {
+    closeGifPanel();
+    return;
+  }
+  openGifPanel();
+});
+
+gifSend.addEventListener("click", () => {
+  sendGif();
+});
+
+gifInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    sendGif();
+  }
+});
+
 form.addEventListener("submit", (event) => {
   event.preventDefault();
+  if (document.activeElement === gifInput) {
+    sendGif();
+    return;
+  }
   const text = input.value.trim();
   if (!currentUser) {
     setJoinError("Enter name and password to join.");
@@ -131,6 +224,7 @@ socket.on("auth_ok", (payload) => {
   currentUser = payload?.username || "";
   closeOverlay();
   setJoinError("");
+  closeGifPanel();
 });
 
 socket.on("auth_error", (message) => {

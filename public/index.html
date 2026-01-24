@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Classroom Chat</title>
+    <title>Classroom CS</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="app">
       <header class="top-bar">
-        <h1>Classroom Chat</h1>
+        <h1>Classroom CS</h1>
         <span id="connection-status" class="status-pill">Connecting...</span>
       </header>
 
@@ -18,14 +18,44 @@
       </main>
 
       <form id="message-form" class="composer" autocomplete="off">
-        <input
-          id="message-input"
-          type="text"
-          placeholder="Type a message..."
-          maxlength="500"
-          required
-        />
-        <button type="submit">Send</button>
+        <div class="composer-row">
+          <input
+            id="message-input"
+            type="text"
+            placeholder="Type a message..."
+            maxlength="500"
+          />
+          <button type="submit">Send</button>
+        </div>
+        <div class="composer-tools">
+          <div class="emoji-row" aria-label="Emojis">
+            <button class="emoji-button" type="button" data-emoji="😀">
+              😀
+            </button>
+            <button class="emoji-button" type="button" data-emoji="😂">
+              😂
+            </button>
+            <button class="emoji-button" type="button" data-emoji="👍">
+              👍
+            </button>
+            <button class="emoji-button" type="button" data-emoji="🎉">
+              🎉
+            </button>
+            <button class="emoji-button" type="button" data-emoji="❤️">
+              ❤️
+            </button>
+          </div>
+          <button id="gif-toggle" class="gif-toggle" type="button">GIF</button>
+        </div>
+        <div id="gif-panel" class="gif-panel">
+          <input
+            id="gif-input"
+            type="url"
+            placeholder="Paste GIF URL (https://...gif)"
+          />
+          <button id="gif-send" type="button">Send GIF</button>
+          <span id="gif-error" class="error" aria-live="polite"></span>
+        </div>
       </form>
     </div>
 

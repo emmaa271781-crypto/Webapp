@@ -102,15 +102,29 @@ body {
   line-height: 1.4;
 }
 
+.message-gif {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 0.4rem;
+}
+
 .composer {
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 0.6rem;
   padding: 1rem 1.5rem;
   border-top: 1px solid #e5e7eb;
   background: #ffffff;
 }
 
-.composer input {
+.composer-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.composer-row input,
+.gif-panel input {
   flex: 1;
   padding: 0.6rem 0.8rem;
   border-radius: 0.4rem;
@@ -118,7 +132,8 @@ body {
   background: #ffffff;
 }
 
-.composer button {
+.composer-row button,
+.gif-panel button {
   padding: 0.6rem 1rem;
   border-radius: 0.4rem;
   border: 1px solid #2563eb;
@@ -127,9 +142,57 @@ body {
   cursor: pointer;
 }
 
-.composer button:disabled {
+.composer-row button:disabled,
+.gif-panel button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.composer-tools {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.emoji-row {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.emoji-button {
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  border-radius: 0.4rem;
+  padding: 0.25rem 0.4rem;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.gif-toggle {
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+  border-radius: 0.4rem;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+}
+
+.gif-panel {
+  display: none;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.gif-panel.show {
+  display: flex;
+}
+
+.gif-panel .error {
+  margin: 0.25rem 0 0;
+  flex-basis: 100%;
 }
 
 .overlay {
