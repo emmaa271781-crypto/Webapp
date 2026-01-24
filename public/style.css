@@ -4,9 +4,9 @@
 
 body {
   margin: 0;
-  font-family: Arial, sans-serif;
-  background: #f5f5f5;
-  color: #111827;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: #0f111a;
+  color: #e5e7eb;
   min-height: 100vh;
 }
 
@@ -22,8 +22,8 @@ body {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.5rem;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
+  background: #171a23;
+  border-bottom: 1px solid #23283a;
 }
 
 .top-bar h1 {
@@ -36,18 +36,19 @@ body {
   align-items: center;
   padding: 0.3rem 0.7rem;
   border-radius: 999px;
-  background: #e5e7eb;
+  background: #2a3246;
+  color: #cbd5f5;
   font-size: 0.8rem;
 }
 
 .status-pill.status-ok {
-  background: #dcfce7;
-  color: #166534;
+  background: #123225;
+  color: #6ee7b7;
 }
 
 .status-pill.status-offline {
-  background: #fee2e2;
-  color: #991b1b;
+  background: #3a1f1f;
+  color: #fca5a5;
 }
 
 .chat {
@@ -66,8 +67,8 @@ body {
 }
 
 .message {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: #1a1f2e;
+  border: 1px solid #262c40;
   border-radius: 0.5rem;
   padding: 0.6rem 0.8rem;
   max-width: 70%;
@@ -75,16 +76,16 @@ body {
 
 .message.self {
   align-self: flex-end;
-  background: #e0f2fe;
-  border-color: #bae6fd;
+  background: #2b3250;
+  border-color: #3b4470;
 }
 
 .message.system {
   align-self: center;
-  background: #f3f4f6;
-  border-color: #e5e7eb;
+  background: #141924;
+  border-color: #20263a;
   font-style: italic;
-  color: #6b7280;
+  color: #9ca3af;
 }
 
 .message-meta {
@@ -92,7 +93,7 @@ body {
   justify-content: space-between;
   gap: 1rem;
   font-size: 0.75rem;
-  color: #6b7280;
+  color: #9ca3af;
   margin-bottom: 0.25rem;
 }
 
@@ -114,8 +115,8 @@ body {
   flex-direction: column;
   gap: 0.6rem;
   padding: 1rem 1.5rem;
-  border-top: 1px solid #e5e7eb;
-  background: #ffffff;
+  border-top: 1px solid #23283a;
+  background: #171a23;
 }
 
 .composer-row {
@@ -128,16 +129,22 @@ body {
   flex: 1;
   padding: 0.6rem 0.8rem;
   border-radius: 0.4rem;
-  border: 1px solid #d1d5db;
-  background: #ffffff;
+  border: 1px solid #2a334a;
+  background: #0f1422;
+  color: #e5e7eb;
+}
+
+.composer-row input::placeholder,
+.gif-panel input::placeholder {
+  color: #6b7280;
 }
 
 .composer-row button,
 .gif-panel button {
   padding: 0.6rem 1rem;
   border-radius: 0.4rem;
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid #5865f2;
+  background: #5865f2;
   color: white;
   cursor: pointer;
 }
@@ -163,8 +170,9 @@ body {
 }
 
 .emoji-button {
-  border: 1px solid #e5e7eb;
-  background: #f3f4f6;
+  border: 1px solid #2a334a;
+  background: #1a1f2e;
+  color: #e5e7eb;
   border-radius: 0.4rem;
   padding: 0.25rem 0.4rem;
   cursor: pointer;
@@ -172,8 +180,9 @@ body {
 }
 
 .gif-toggle {
-  border: 1px solid #d1d5db;
-  background: #f3f4f6;
+  border: 1px solid #2a334a;
+  background: #1a1f2e;
+  color: #e5e7eb;
   border-radius: 0.4rem;
   padding: 0.35rem 0.6rem;
   cursor: pointer;
@@ -198,7 +207,7 @@ body {
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(5, 8, 15, 0.7);
   display: none;
   align-items: center;
   justify-content: center;
@@ -210,11 +219,20 @@ body {
 }
 
 .join-card {
-  background: #ffffff;
+  background: #171a23;
   border-radius: 0.6rem;
   padding: 1.5rem;
   width: min(360px, 100%);
-  border: 1px solid #e5e7eb;
+  border: 1px solid #23283a;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  transform: scale(0.96);
+  opacity: 0;
+  transition: transform 160ms ease, opacity 160ms ease;
+}
+
+.overlay.show .join-card {
+  transform: scale(1);
+  opacity: 1;
 }
 
 .join-card h2 {
@@ -226,7 +244,9 @@ body {
   margin-top: 0.75rem;
   padding: 0.6rem 0.8rem;
   border-radius: 0.4rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid #2a334a;
+  background: #0f1422;
+  color: #e5e7eb;
 }
 
 .join-card button {
@@ -234,15 +254,15 @@ body {
   margin-top: 0.75rem;
   padding: 0.6rem 0.8rem;
   border-radius: 0.4rem;
-  border: 1px solid #2563eb;
-  background: #2563eb;
+  border: 1px solid #5865f2;
+  background: #5865f2;
   color: white;
   cursor: pointer;
 }
 
 .error {
   display: none;
-  color: #b91c1c;
+  color: #f87171;
   font-size: 0.85rem;
   margin: 0.5rem 0 0;
 }
