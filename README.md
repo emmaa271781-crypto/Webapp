@@ -1,4 +1,4 @@
-# Web Messenger
+# Classroom Chat
 
 A lightweight realtime web messenger built with Express and Socket.IO. The
 project is ready for Railway hosting and will redeploy automatically whenever
@@ -10,6 +10,7 @@ you push updates to GitHub.
 - Simple name picker with join/leave notices
 - Message history (last 100 messages in memory)
 - Railway-friendly `npm start` entry point
+- Password gate (default: `0327`)
 
 ## Run locally
 
@@ -19,6 +20,11 @@ npm run dev
 ```
 
 Open `http://localhost:3000` in multiple tabs to chat.
+
+### Password
+
+The default password is `0327`. You can override it by setting
+`CHAT_PASSWORD` in your environment.
 
 ## Railway deployment (GitHub-connected)
 

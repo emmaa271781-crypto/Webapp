@@ -10,6 +10,7 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const MAX_HISTORY = 100;
+const REQUIRED_PASSWORD = process.env.CHAT_PASSWORD || "0327";
 const messageHistory = [];
 
 app.use(express.static(path.join(__dirname, "public")));
@@ -42,16 +43,33 @@ const addMessageToHistory = (message) => {
 };
 
 io.on("connection", (socket) => {
-  socket.emit("history", messageHistory);
-
   socket.on("join", (payload) => {
     const username = sanitizeName(payload?.username);
+    const password = String(payload?.password || "");
+    if (password !== REQUIRED_PASSWORD) {
+      socket.emit("auth_error", "Incorrect password.");
+      return;
+    }
+
+    const previousName = socket.data.username;
     socket.data.username = username;
-    socket.broadcast.emit("system", `${username} joined the chat`);
+    socket.data.authed = true;
+
+    socket.emit("auth_ok", { username });
+    socket.emit("history", messageHistory);
+
+    if (previousName && previousName !== username) {
+      socket.broadcast.emit(
+        "system",
+        `${previousName} is now ${username}`
+      );
+    } else if (!previousName) {
+      socket.broadcast.emit("system", `${username} joined the chat`);
+    }
   });
 
   socket.on("message", (payload) => {
-    if (!socket.data.username) {
+    if (!socket.data.authed || !socket.data.username) {
       return;
     }
     const text = sanitizeMessage(payload?.text);
@@ -69,7 +87,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("disconnect", () => {
-    if (socket.data.username) {
+    if (socket.data.authed && socket.data.username) {
       socket.broadcast.emit(
         "system",
         `${socket.data.username} left the chat`

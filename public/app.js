@@ -7,7 +7,8 @@ const statusPill = document.getElementById("connection-status");
 const overlay = document.getElementById("join-overlay");
 const joinForm = document.getElementById("join-form");
 const usernameInput = document.getElementById("username");
-const changeNameButton = document.getElementById("change-name");
+const passwordInput = document.getElementById("password");
+const joinError = document.getElementById("join-error");
 
 let currentUser = "";
 
@@ -70,6 +71,11 @@ const addChatMessage = (message) => {
   scrollToBottom();
 };
 
+const setJoinError = (message) => {
+  joinError.textContent = message;
+  joinError.style.display = message ? "block" : "none";
+};
+
 const openOverlay = () => {
   overlay.classList.add("show");
   usernameInput.focus();
@@ -82,23 +88,26 @@ const closeOverlay = () => {
 joinForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const name = usernameInput.value.trim();
+  const password = passwordInput.value.trim();
   if (!name) {
+    setJoinError("Name required.");
     usernameInput.focus();
     return;
   }
-  currentUser = name.slice(0, 32);
-  socket.emit("join", { username: currentUser });
-  closeOverlay();
-});
-
-changeNameButton.addEventListener("click", () => {
-  openOverlay();
+  if (!password) {
+    setJoinError("Password required.");
+    passwordInput.focus();
+    return;
+  }
+  setJoinError("");
+  socket.emit("join", { username: name.slice(0, 32), password });
 });
 
 form.addEventListener("submit", (event) => {
   event.preventDefault();
   const text = input.value.trim();
   if (!currentUser) {
+    setJoinError("Enter name and password to join.");
     openOverlay();
     return;
   }
@@ -116,6 +125,19 @@ socket.on("connect", () => {
 
 socket.on("disconnect", () => {
   setStatus("Offline", "status-offline");
+});
+
+socket.on("auth_ok", (payload) => {
+  currentUser = payload?.username || "";
+  closeOverlay();
+  setJoinError("");
+});
+
+socket.on("auth_error", (message) => {
+  currentUser = "";
+  setJoinError(message || "Incorrect password.");
+  passwordInput.value = "";
+  openOverlay();
 });
 
 socket.on("history", (messages) => {
