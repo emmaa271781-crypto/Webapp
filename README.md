@@ -12,6 +12,8 @@ you push updates to GitHub.
 - Railway-friendly `npm start` entry point
 - Password gate (default: `0327`)
 - Emoji shortcuts and GIF links
+- GIF search (via GIPHY API)
+- One-click call + screen share (WebRTC)
 
 ## Run locally
 
@@ -26,6 +28,11 @@ Open `http://localhost:3000` in multiple tabs to chat.
 
 The default password is `0327`. You can override it by setting
 `CHAT_PASSWORD` in your environment.
+
+### GIF search
+
+GIF search uses GIPHY. You can set `GIPHY_API_KEY` to your own key, otherwise
+the app uses a demo key with limited rate.
 
 ## Railway deployment (GitHub-connected)
 

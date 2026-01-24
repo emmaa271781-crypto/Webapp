@@ -11,12 +11,52 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const MAX_HISTORY = 100;
 const REQUIRED_PASSWORD = process.env.CHAT_PASSWORD || "0327";
+const GIPHY_API_KEY = process.env.GIPHY_API_KEY || "dc6zaTOxFJmzC";
+const ROOM_NAME = "main";
 const messageHistory = [];
 
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/healthz", (req, res) => {
   res.status(200).json({ status: "ok" });
+});
+
+app.get("/api/gifs", async (req, res) => {
+  const query = String(req.query.q || "").trim().slice(0, 80);
+  if (!query) {
+    res.json({ results: [] });
+    return;
+  }
+  try {
+    const url = new URL("https://api.giphy.com/v1/gifs/search");
+    url.searchParams.set("api_key", GIPHY_API_KEY);
+    url.searchParams.set("q", query);
+    url.searchParams.set("limit", "12");
+    url.searchParams.set("rating", "pg");
+    const response = await fetch(url);
+    if (!response.ok) {
+      res.status(502).json({ error: "GIF search failed." });
+      return;
+    }
+    const data = await response.json();
+    const results = (data.data || [])
+      .map((gif) => {
+        const images = gif.images || {};
+        const urlValue = images.fixed_height?.url || images.original?.url;
+        const preview =
+          images.fixed_width_small?.url ||
+          images.fixed_height_small?.url ||
+          urlValue;
+        if (!urlValue) {
+          return null;
+        }
+        return { id: gif.id, url: urlValue, preview };
+      })
+      .filter(Boolean);
+    res.json({ results });
+  } catch (error) {
+    res.status(500).json({ error: "GIF search failed." });
+  }
 });
 
 const sanitizeName = (value) => {
@@ -54,6 +94,7 @@ io.on("connection", (socket) => {
     const previousName = socket.data.username;
     socket.data.username = username;
     socket.data.authed = true;
+    socket.join(ROOM_NAME);
 
     socket.emit("auth_ok", { username });
     socket.emit("history", messageHistory);
@@ -84,6 +125,43 @@ io.on("connection", (socket) => {
     };
     addMessageToHistory(message);
     io.emit("message", message);
+  });
+
+  socket.on("webrtc_offer", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    if (!payload?.offer) {
+      return;
+    }
+    socket.to(ROOM_NAME).emit("webrtc_offer", { offer: payload.offer });
+  });
+
+  socket.on("webrtc_answer", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    if (!payload?.answer) {
+      return;
+    }
+    socket.to(ROOM_NAME).emit("webrtc_answer", { answer: payload.answer });
+  });
+
+  socket.on("webrtc_ice", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    if (!payload?.candidate) {
+      return;
+    }
+    socket.to(ROOM_NAME).emit("webrtc_ice", { candidate: payload.candidate });
+  });
+
+  socket.on("webrtc_hangup", () => {
+    if (!socket.data.authed) {
+      return;
+    }
+    socket.to(ROOM_NAME).emit("webrtc_hangup");
   });
 
   socket.on("disconnect", () => {
