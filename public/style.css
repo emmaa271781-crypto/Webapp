@@ -138,6 +138,7 @@ body {
   flex-direction: column;
   gap: 0.5rem;
   box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+  z-index: 10;
 }
 
 .call-panel.show {
@@ -178,6 +179,15 @@ body {
   max-width: 100%;
   max-height: 260px;
   border-radius: 0.4rem;
+}
+
+.message-image,
+.message-video {
+  display: block;
+  max-width: 100%;
+  max-height: 260px;
+  border-radius: 0.4rem;
+  background: #0b0f1a;
 }
 
 .composer {
@@ -233,6 +243,11 @@ body {
   flex-wrap: wrap;
 }
 
+.composer-tools .error {
+  flex-basis: 100%;
+  margin: 0.35rem 0 0;
+}
+
 .tool-buttons {
   display: flex;
   gap: 0.5rem;
@@ -256,10 +271,15 @@ body {
   padding: 0.75rem;
   background: #151a26;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .gif-panel.show {
   display: block;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .gif-panel .error {
@@ -280,10 +300,15 @@ body {
   padding: 0.75rem;
   background: #151a26;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
 .emoji-panel.show {
   display: block;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .emoji-grid {

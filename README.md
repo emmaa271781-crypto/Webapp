@@ -14,6 +14,7 @@ you push updates to GitHub.
 - Emoji shortcuts and GIF links
 - GIF search (via GIPHY API)
 - One-click call + screen share (WebRTC)
+- Image/video attachments (small files)
 
 ## Run locally
 
@@ -31,8 +32,8 @@ The default password is `0327`. You can override it by setting
 
 ### GIF search
 
-GIF search uses GIPHY. You can set `GIPHY_API_KEY` to your own key, otherwise
-the app uses a demo key with limited rate.
+GIF search uses GIPHY when `GIPHY_API_KEY` is set and falls back to Tenor
+(`TENOR_API_KEY`) if needed. The included Tenor demo key is rate-limited.
 
 ## Railway deployment (GitHub-connected)
 

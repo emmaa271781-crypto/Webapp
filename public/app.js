@@ -3,6 +3,7 @@ const socket = io();
 const messagesList = document.getElementById("messages");
 const form = document.getElementById("message-form");
 const input = document.getElementById("message-input");
+const chatPanel = document.getElementById("chat-panel");
 const statusPill = document.getElementById("connection-status");
 const overlay = document.getElementById("join-overlay");
 const joinForm = document.getElementById("join-form");
@@ -18,6 +19,9 @@ const gifSearchInput = document.getElementById("gif-search-input");
 const gifSearchButton = document.getElementById("gif-search-button");
 const gifResults = document.getElementById("gif-results");
 const gifError = document.getElementById("gif-error");
+const fileToggle = document.getElementById("file-toggle");
+const fileInput = document.getElementById("file-input");
+const uploadError = document.getElementById("upload-error");
 const callStartButton = document.getElementById("call-start");
 const callShareButton = document.getElementById("call-share");
 const callEndButton = document.getElementById("call-end");
@@ -32,6 +36,7 @@ let screenStream = null;
 let remoteStream = null;
 let isInCall = false;
 let isSharingScreen = false;
+const MAX_FILE_BYTES = 3 * 1024 * 1024;
 
 const emojiList = [
   "😀",
@@ -135,7 +140,10 @@ const isGifUrl = (value) => {
 };
 
 const scrollToBottom = () => {
-  messagesList.scrollTop = messagesList.scrollHeight;
+  if (!chatPanel) {
+    return;
+  }
+  chatPanel.scrollTop = chatPanel.scrollHeight;
 };
 
 const addSystemMessage = (text) => {
@@ -169,16 +177,36 @@ const addChatMessage = (message) => {
 
   const text = document.createElement("p");
   text.className = "message-text";
-  const messageText = String(message.text || "");
-  if (isGifUrl(messageText)) {
-    const image = document.createElement("img");
-    image.className = "message-gif";
-    image.src = messageText;
-    image.alt = "GIF";
-    image.loading = "lazy";
-    text.appendChild(image);
+  const messageType = message.type || (message.file ? "file" : "text");
+  if (messageType === "file" && message.file?.url) {
+    const file = message.file;
+    if (file.kind === "video") {
+      const video = document.createElement("video");
+      video.className = "message-video";
+      video.src = file.url;
+      video.controls = true;
+      video.playsInline = true;
+      text.appendChild(video);
+    } else {
+      const image = document.createElement("img");
+      image.className = "message-image";
+      image.src = file.url;
+      image.alt = file.name || "Image";
+      image.loading = "lazy";
+      text.appendChild(image);
+    }
   } else {
-    text.textContent = messageText;
+    const messageText = String(message.text || "");
+    if (isGifUrl(messageText)) {
+      const image = document.createElement("img");
+      image.className = "message-gif";
+      image.src = messageText;
+      image.alt = "GIF";
+      image.loading = "lazy";
+      text.appendChild(image);
+    } else {
+      text.textContent = messageText;
+    }
   }
 
   item.appendChild(meta);
@@ -195,6 +223,11 @@ const setJoinError = (message) => {
 const setGifError = (message) => {
   gifError.textContent = message;
   gifError.style.display = message ? "block" : "none";
+};
+
+const setUploadError = (message) => {
+  uploadError.textContent = message;
+  uploadError.style.display = message ? "block" : "none";
 };
 
 const updateCallButtons = () => {
@@ -228,6 +261,7 @@ const openGifPanel = () => {
 const closeGifPanel = () => {
   gifPanel.classList.remove("show");
   setGifError("");
+  clearGifResults();
 };
 
 const openOverlay = () => {
@@ -235,6 +269,7 @@ const openOverlay = () => {
   usernameInput.focus();
   closeEmojiPanel();
   closeGifPanel();
+  setUploadError("");
 };
 
 const closeOverlay = () => {
@@ -325,6 +360,49 @@ const searchGifs = async () => {
     clearGifResults();
     setGifError("GIF search failed. Try again.");
   }
+};
+
+const handleFileUpload = (file) => {
+  if (!file) {
+    return;
+  }
+  if (!currentUser) {
+    setJoinError("Enter name and password to join.");
+    openOverlay();
+    return;
+  }
+  closeEmojiPanel();
+  closeGifPanel();
+  if (!file.type || (!file.type.startsWith("image/") && !file.type.startsWith("video/"))) {
+    setUploadError("Only images or videos are allowed.");
+    return;
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    setUploadError("File too large (max 3MB).");
+    return;
+  }
+  setUploadError("");
+  const reader = new FileReader();
+  reader.onload = () => {
+    const result = reader.result;
+    if (typeof result !== "string") {
+      setUploadError("File upload failed.");
+      return;
+    }
+    socket.emit("message", {
+      type: "file",
+      file: {
+        url: result,
+        name: file.name,
+        mime: file.type,
+        kind: file.type.startsWith("video/") ? "video" : "image",
+      },
+    });
+  };
+  reader.onerror = () => {
+    setUploadError("File upload failed.");
+  };
+  reader.readAsDataURL(file);
 };
 
 const ensureLocalStream = async () => {
@@ -522,6 +600,18 @@ gifSearchInput.addEventListener("keydown", (event) => {
   }
 });
 
+fileToggle.addEventListener("click", () => {
+  fileInput.click();
+});
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files && fileInput.files[0];
+  if (file) {
+    handleFileUpload(file);
+  }
+  fileInput.value = "";
+});
+
 callStartButton.addEventListener("click", () => {
   startCall();
 });
@@ -565,6 +655,7 @@ socket.on("auth_ok", (payload) => {
   setJoinError("");
   closeGifPanel();
   closeEmojiPanel();
+  setUploadError("");
   updateCallButtons();
 });
 
@@ -573,6 +664,12 @@ socket.on("auth_error", (message) => {
   setJoinError(message || "Incorrect password.");
   passwordInput.value = "";
   openOverlay();
+});
+
+socket.on("message_error", (message) => {
+  if (message) {
+    addSystemMessage(message);
+  }
 });
 
 socket.on("webrtc_offer", async (payload) => {

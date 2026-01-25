@@ -24,7 +24,7 @@
         </div>
       </header>
 
-      <main class="chat">
+      <main id="chat-panel" class="chat">
         <ul id="messages" class="messages"></ul>
       </main>
 
@@ -58,7 +58,17 @@
             <button id="gif-toggle" class="tool-button" type="button">
               GIF
             </button>
+            <button id="file-toggle" class="tool-button" type="button">
+              Attach
+            </button>
+            <input
+              id="file-input"
+              type="file"
+              accept="image/*,video/*"
+              hidden
+            />
           </div>
+          <span id="upload-error" class="error" aria-live="polite"></span>
         </div>
         <div id="emoji-panel" class="emoji-panel">
           <div class="panel-title">Pick an emoji</div>
