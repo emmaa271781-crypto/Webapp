@@ -24,6 +24,9 @@
           <button id="cam-toggle" class="call-button" type="button" disabled>
             Cam: Off
           </button>
+          <button id="voice-toggle" class="call-button" type="button" disabled>
+            Voice: Clean
+          </button>
           <button id="call-end" class="call-button danger" type="button" disabled>
             Hang up
           </button>
@@ -56,20 +59,45 @@
           <div id="typing-indicator" class="typing-indicator"></div>
 
           <div id="call-panel" class="call-panel">
-            <div class="call-title">Live call</div>
-            <video
-              id="remote-video"
-              class="call-video"
-              autoplay
-              playsinline
-            ></video>
-            <video
-              id="local-video"
-              class="call-video local-video"
-              autoplay
-              muted
-              playsinline
-            ></video>
+            <div class="call-header">
+              <div class="call-title">Voice Call</div>
+              <span id="call-status" class="call-status-pill">Waiting</span>
+            </div>
+            <div class="call-grid">
+              <div class="call-tile">
+                <div class="call-label">Remote</div>
+                <div class="call-media">
+                  <video
+                    id="remote-video"
+                    class="call-video hidden"
+                    autoplay
+                    playsinline
+                  ></video>
+                  <div id="remote-placeholder" class="call-placeholder">
+                    Waiting for video
+                  </div>
+                </div>
+                <div id="remote-status" class="call-status">Waiting...</div>
+              </div>
+              <div class="call-tile">
+                <div class="call-label">You</div>
+                <div class="call-media">
+                  <video
+                    id="local-video"
+                    class="call-video hidden"
+                    autoplay
+                    muted
+                    playsinline
+                  ></video>
+                  <div id="local-placeholder" class="call-placeholder">
+                    Camera off
+                  </div>
+                </div>
+                <div id="local-status" class="call-status">
+                  Mic muted • Camera off
+                </div>
+              </div>
+            </div>
           </div>
 
           <form id="message-form" class="composer" autocomplete="off">

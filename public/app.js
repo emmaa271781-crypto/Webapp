@@ -29,10 +29,16 @@ const callStartButton = document.getElementById("call-start");
 const callShareButton = document.getElementById("call-share");
 const micToggle = document.getElementById("mic-toggle");
 const camToggle = document.getElementById("cam-toggle");
+const voiceToggle = document.getElementById("voice-toggle");
 const callEndButton = document.getElementById("call-end");
 const callPanel = document.getElementById("call-panel");
 const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
+const localPlaceholder = document.getElementById("local-placeholder");
+const remotePlaceholder = document.getElementById("remote-placeholder");
+const localStatus = document.getElementById("local-status");
+const remoteStatus = document.getElementById("remote-status");
+const callStatus = document.getElementById("call-status");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
 const editBanner = document.getElementById("edit-banner");
@@ -56,6 +62,9 @@ let cameraTrack = null;
 let audioTransceiver = null;
 let videoTransceiver = null;
 let isMakingOffer = false;
+let voiceIsolationEnabled = true;
+let remoteHasAudio = false;
+let remoteHasVideo = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -184,6 +193,13 @@ const updateNotifyButton = () => {
     : "🔔 Notify: Off";
 };
 
+const updateVoiceButton = () => {
+  voiceToggle.textContent = voiceIsolationEnabled
+    ? "Voice: Clean"
+    : "Voice: Normal";
+  voiceToggle.classList.toggle("active", voiceIsolationEnabled);
+};
+
 const saveSetting = (key, value) => {
   try {
     localStorage.setItem(key, value ? "true" : "false");
@@ -197,6 +213,27 @@ const loadSetting = (key) => {
     return localStorage.getItem(key) === "true";
   } catch (error) {
     return false;
+  }
+};
+
+const getAudioConstraints = () => ({
+  echoCancellation: voiceIsolationEnabled,
+  noiseSuppression: voiceIsolationEnabled,
+  autoGainControl: voiceIsolationEnabled,
+});
+
+const applyVoiceConstraints = async () => {
+  if (!localStream) {
+    return;
+  }
+  const track = localStream.getAudioTracks()[0];
+  if (!track || !track.applyConstraints) {
+    return;
+  }
+  try {
+    await track.applyConstraints(getAudioConstraints());
+  } catch (error) {
+    // Ignore constraint failures.
   }
 };
 
@@ -797,12 +834,16 @@ const updateCallButtons = () => {
   callShareButton.disabled = !isInCall;
   micToggle.disabled = !isInCall;
   camToggle.disabled = !isInCall;
+  voiceToggle.disabled = !isInCall;
   callStartButton.textContent = isInCall ? "In Call" : "Join Call";
   callShareButton.textContent = isSharingScreen ? "Stop share" : "Share";
   micToggle.textContent = isMicMuted ? "Mic: Off" : "Mic: On";
   camToggle.textContent = isCameraEnabled ? "Cam: On" : "Cam: Off";
   micToggle.classList.toggle("active", !isMicMuted);
   camToggle.classList.toggle("active", isCameraEnabled);
+  updateVoiceButton();
+  updateLocalStatus();
+  updateRemoteStatus();
 };
 
 const showCallPanel = () => {
@@ -813,19 +854,46 @@ const hideCallPanel = () => {
   callPanel.classList.remove("show");
 };
 
+const updateCallStatus = () => {
+  if (!callStatus) {
+    return;
+  }
+  if (!isInCall) {
+    callStatus.textContent = "Waiting";
+    return;
+  }
+  if (remoteHasAudio || remoteHasVideo) {
+    callStatus.textContent = "Connected";
+  } else {
+    callStatus.textContent = "Waiting";
+  }
+};
+
 const updateLocalVideoPreview = () => {
   if (isSharingScreen && screenStream) {
     localVideo.srcObject = screenStream;
     localVideo.classList.remove("hidden");
+    if (localPlaceholder) {
+      localPlaceholder.classList.add("hidden");
+    }
+    updateLocalStatus();
     return;
   }
   if (isCameraEnabled && cameraTrack && localStream) {
     localVideo.srcObject = localStream;
     localVideo.classList.remove("hidden");
+    if (localPlaceholder) {
+      localPlaceholder.classList.add("hidden");
+    }
+    updateLocalStatus();
     return;
   }
   localVideo.srcObject = null;
   localVideo.classList.add("hidden");
+  if (localPlaceholder) {
+    localPlaceholder.classList.remove("hidden");
+  }
+  updateLocalStatus();
 };
 
 const applyMicState = () => {
@@ -835,6 +903,39 @@ const applyMicState = () => {
   localStream.getAudioTracks().forEach((track) => {
     track.enabled = !isMicMuted;
   });
+};
+
+const updateLocalStatus = () => {
+  if (!localStatus) {
+    return;
+  }
+  const micLabel = isMicMuted ? "Mic muted" : "Mic live";
+  const videoLabel = isSharingScreen
+    ? "Sharing screen"
+    : isCameraEnabled
+      ? "Camera on"
+      : "Camera off";
+  localStatus.textContent = `${micLabel} • ${videoLabel}`;
+};
+
+const updateRemoteStatus = () => {
+  if (!remoteStatus) {
+    return;
+  }
+  if (!remoteHasAudio && !remoteHasVideo) {
+    remoteStatus.textContent = "Waiting for peer...";
+  } else if (remoteHasAudio && remoteHasVideo) {
+    remoteStatus.textContent = "Voice + Video";
+  } else if (remoteHasAudio) {
+    remoteStatus.textContent = "Voice connected";
+  } else {
+    remoteStatus.textContent = "Video connected";
+  }
+  if (remotePlaceholder) {
+    remotePlaceholder.classList.toggle("hidden", remoteHasVideo);
+  }
+  remoteVideo.classList.toggle("hidden", !remoteHasVideo);
+  updateCallStatus();
 };
 
 const openEmojiPanel = () => {
@@ -1013,7 +1114,7 @@ const ensureLocalStream = async () => {
     return localStream;
   }
   const audioStream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
+    audio: getAudioConstraints(),
     video: false,
   });
   if (!localStream) {
@@ -1047,6 +1148,23 @@ const createPeerConnection = async () => {
       remoteVideo.srcObject = remoteStream;
     }
     remoteStream.addTrack(event.track);
+    if (event.track.kind === "audio") {
+      remoteHasAudio = true;
+    }
+    if (event.track.kind === "video") {
+      remoteHasVideo = true;
+    }
+    updateRemoteStatus();
+    event.track.addEventListener("ended", () => {
+      if (remoteStream) {
+        remoteStream.removeTrack(event.track);
+      }
+      const audioTracks = remoteStream ? remoteStream.getAudioTracks() : [];
+      const videoTracks = remoteStream ? remoteStream.getVideoTracks() : [];
+      remoteHasAudio = audioTracks.some((track) => track.readyState === "live");
+      remoteHasVideo = videoTracks.some((track) => track.readyState === "live");
+      updateRemoteStatus();
+    });
   };
 
   peerConnection.onconnectionstatechange = () => {
@@ -1151,6 +1269,8 @@ const endCall = (notifyPeer) => {
   isSharingScreen = false;
   isMicMuted = false;
   isCameraEnabled = false;
+  remoteHasAudio = false;
+  remoteHasVideo = false;
   hideCallPanel();
   updateLocalVideoPreview();
   updateCallButtons();
@@ -1167,17 +1287,15 @@ const startCall = async () => {
   }
   try {
     await createPeerConnection();
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit("webrtc_offer", { offer });
     isInCall = true;
     isMicMuted = true;
     isCameraEnabled = false;
     showCallPanel();
     updateLocalVideoPreview();
     updateCallButtons();
+    await negotiate();
   } catch (error) {
-    addSystemMessage("Call failed. Check microphone permissions.");
+    addSystemMessage("Call failed. Try again.");
     endCall(false);
   }
 };
@@ -1198,7 +1316,7 @@ const stopScreenShare = () => {
 };
 
 const toggleScreenShare = async () => {
-  if (!peerConnection || !localStream) {
+  if (!peerConnection) {
     return;
   }
   if (isSharingScreen) {
@@ -1208,6 +1326,9 @@ const toggleScreenShare = async () => {
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const screenTrack = screenStream.getVideoTracks()[0];
+    if (!localStream) {
+      localStream = new MediaStream();
+    }
     await attachVideoTrack(screenTrack);
     screenTrack.onended = () => {
       stopScreenShare();
@@ -1368,6 +1489,16 @@ callEndButton.addEventListener("click", () => {
   endCall(true);
 });
 
+voiceToggle.addEventListener("click", async () => {
+  if (!isInCall) {
+    return;
+  }
+  voiceIsolationEnabled = !voiceIsolationEnabled;
+  updateVoiceButton();
+  saveSetting("voiceIsolationEnabled", voiceIsolationEnabled);
+  await applyVoiceConstraints();
+});
+
 micToggle.addEventListener("click", () => {
   if (!isInCall) {
     return;
@@ -1383,6 +1514,7 @@ micToggle.addEventListener("click", () => {
         }
         isMicMuted = false;
         track.enabled = true;
+        await applyVoiceConstraints();
         await attachAudioTrack(track);
         updateCallButtons();
       } catch (error) {
@@ -1419,7 +1551,9 @@ camToggle.addEventListener("click", async () => {
     return;
   }
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
     cameraTrack = stream.getVideoTracks()[0];
     if (!localStream) {
       localStream = new MediaStream();
@@ -1544,6 +1678,7 @@ socket.on("webrtc_offer", async (payload) => {
     showCallPanel();
     updateLocalVideoPreview();
     updateCallButtons();
+    await negotiate();
   } catch (error) {
     addSystemMessage("Incoming call failed.");
     endCall(true);
@@ -1622,12 +1757,19 @@ updateCallButtons();
 hideCallPanel();
 soundEnabled = loadSetting("soundEnabled");
 notifyEnabled = loadSetting("notifyEnabled");
+try {
+  const storedVoice = localStorage.getItem("voiceIsolationEnabled");
+  voiceIsolationEnabled = storedVoice === null ? true : storedVoice === "true";
+} catch (error) {
+  voiceIsolationEnabled = true;
+}
 if (notifyEnabled && Notification.permission !== "granted") {
   notifyEnabled = false;
   saveSetting("notifyEnabled", notifyEnabled);
 }
 updateSoundButton();
 updateNotifyButton();
+updateVoiceButton();
 updateTitle();
 if (pushSupported) {
   registerServiceWorker();
