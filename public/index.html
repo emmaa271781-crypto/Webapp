@@ -30,77 +30,104 @@
         </div>
       </header>
 
-      <main id="chat-panel" class="chat">
-        <ul id="messages" class="messages"></ul>
-        <button id="scroll-latest" class="scroll-latest" type="button">
-          New messages ↓
-        </button>
-      </main>
+      <div class="layout">
+        <aside class="sidebar">
+          <div class="sidebar-section">
+            <div class="sidebar-title">Online</div>
+            <div id="online-count" class="online-count">0 online</div>
+            <ul id="user-list" class="user-list"></ul>
+          </div>
+        </aside>
 
-      <div id="call-panel" class="call-panel">
-        <div class="call-title">Live call</div>
-        <video id="remote-video" class="call-video" autoplay playsinline></video>
-        <video
-          id="local-video"
-          class="call-video local-video"
-          autoplay
-          muted
-          playsinline
-        ></video>
+        <div class="main">
+          <main id="chat-panel" class="chat">
+            <ul id="messages" class="messages"></ul>
+            <button id="scroll-latest" class="scroll-latest" type="button">
+              New messages ↓
+            </button>
+          </main>
+
+          <div id="typing-indicator" class="typing-indicator"></div>
+
+          <div id="call-panel" class="call-panel">
+            <div class="call-title">Live call</div>
+            <video
+              id="remote-video"
+              class="call-video"
+              autoplay
+              playsinline
+            ></video>
+            <video
+              id="local-video"
+              class="call-video local-video"
+              autoplay
+              muted
+              playsinline
+            ></video>
+          </div>
+
+          <form id="message-form" class="composer" autocomplete="off">
+            <div id="edit-banner" class="edit-banner">
+              <span id="edit-text"></span>
+              <button id="edit-cancel" type="button">Cancel</button>
+            </div>
+            <div id="reply-banner" class="reply-banner">
+              <span id="reply-text"></span>
+              <button id="reply-cancel" type="button">Cancel</button>
+            </div>
+            <div class="composer-row">
+              <input
+                id="message-input"
+                type="text"
+                placeholder="Type a message..."
+                maxlength="500"
+              />
+              <button type="submit">Send</button>
+            </div>
+            <div class="composer-tools">
+              <div class="tool-buttons">
+                <button id="emoji-toggle" class="tool-button" type="button">
+                  😊 Emoji
+                </button>
+                <button id="gif-toggle" class="tool-button" type="button">
+                  GIF
+                </button>
+                <button id="file-toggle" class="tool-button" type="button">
+                  Attach
+                </button>
+                <input
+                  id="file-input"
+                  type="file"
+                  accept="image/*,video/*"
+                  hidden
+                />
+              </div>
+              <span id="upload-error" class="error" aria-live="polite"></span>
+            </div>
+            <div id="emoji-panel" class="emoji-panel">
+              <div class="panel-title">Pick an emoji</div>
+              <div
+                id="emoji-grid"
+                class="emoji-grid"
+                aria-label="Emoji picker"
+              ></div>
+            </div>
+            <div id="gif-panel" class="gif-panel">
+              <div class="panel-title">Search GIFs</div>
+              <div class="gif-search">
+                <input
+                  id="gif-search-input"
+                  type="text"
+                  placeholder="Search for a GIF..."
+                />
+                <button id="gif-search-button" type="button">Search</button>
+              </div>
+              <div id="gif-results" class="gif-results"></div>
+              <span id="gif-error" class="error" aria-live="polite"></span>
+            </div>
+          </form>
+        </div>
       </div>
-
-      <form id="message-form" class="composer" autocomplete="off">
-        <div id="reply-banner" class="reply-banner">
-          <span id="reply-text"></span>
-          <button id="reply-cancel" type="button">Cancel</button>
-        </div>
-        <div class="composer-row">
-          <input
-            id="message-input"
-            type="text"
-            placeholder="Type a message..."
-            maxlength="500"
-          />
-          <button type="submit">Send</button>
-        </div>
-        <div class="composer-tools">
-          <div class="tool-buttons">
-            <button id="emoji-toggle" class="tool-button" type="button">
-              😊 Emoji
-            </button>
-            <button id="gif-toggle" class="tool-button" type="button">
-              GIF
-            </button>
-            <button id="file-toggle" class="tool-button" type="button">
-              Attach
-            </button>
-            <input
-              id="file-input"
-              type="file"
-              accept="image/*,video/*"
-              hidden
-            />
-          </div>
-          <span id="upload-error" class="error" aria-live="polite"></span>
-        </div>
-        <div id="emoji-panel" class="emoji-panel">
-          <div class="panel-title">Pick an emoji</div>
-          <div id="emoji-grid" class="emoji-grid" aria-label="Emoji picker"></div>
-        </div>
-        <div id="gif-panel" class="gif-panel">
-          <div class="panel-title">Search GIFs</div>
-          <div class="gif-search">
-            <input
-              id="gif-search-input"
-              type="text"
-              placeholder="Search for a GIF..."
-            />
-            <button id="gif-search-button" type="button">Search</button>
-          </div>
-          <div id="gif-results" class="gif-results"></div>
-          <span id="gif-error" class="error" aria-live="polite"></span>
-        </div>
-      </form>
     </div>
 
     <div id="join-overlay" class="overlay">

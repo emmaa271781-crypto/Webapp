@@ -15,7 +15,8 @@ you push updates to GitHub.
 - GIF search (via GIPHY API)
 - One-click call + screen share (WebRTC)
 - Image/video attachments (small files)
-- Message replies, reactions, and notifications
+- Message replies, reactions, edits/deletes, and notifications
+- Online list with typing indicator
 
 ## Run locally
 

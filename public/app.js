@@ -10,6 +10,9 @@ const joinForm = document.getElementById("join-form");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const joinError = document.getElementById("join-error");
+const typingIndicator = document.getElementById("typing-indicator");
+const userList = document.getElementById("user-list");
+const onlineCount = document.getElementById("online-count");
 const emojiToggle = document.getElementById("emoji-toggle");
 const emojiPanel = document.getElementById("emoji-panel");
 const emojiGrid = document.getElementById("emoji-grid");
@@ -30,6 +33,9 @@ const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
+const editBanner = document.getElementById("edit-banner");
+const editText = document.getElementById("edit-text");
+const editCancel = document.getElementById("edit-cancel");
 const replyBanner = document.getElementById("reply-banner");
 const replyText = document.getElementById("reply-text");
 const replyCancel = document.getElementById("reply-cancel");
@@ -48,6 +54,9 @@ let unreadCount = 0;
 let soundEnabled = false;
 let notifyEnabled = false;
 let replyTarget = null;
+let editTarget = null;
+let typingTimer = null;
+let isTyping = false;
 const messagesById = new Map();
 const reactionEmojis = ["👍", "😂", "❤️", "🎉", "😮"];
 
@@ -246,6 +255,80 @@ const getMessagePreview = (message) => {
   return text.slice(0, 120);
 };
 
+const updatePresence = (payload) => {
+  if (!userList || !onlineCount) {
+    return;
+  }
+  const users = Array.isArray(payload?.users) ? payload.users : [];
+  const total =
+    typeof payload?.total === "number"
+      ? payload.total
+      : users.reduce((sum, user) => sum + (user.count || 0), 0);
+  onlineCount.textContent = `${total} online`;
+  userList.innerHTML = "";
+  users
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((user) => {
+      const item = document.createElement("li");
+      item.className = "user-item";
+      if (user.name === currentUser) {
+        item.classList.add("self");
+      }
+      const name = document.createElement("span");
+      name.textContent = user.name;
+      item.appendChild(name);
+      if (user.count > 1) {
+        const badge = document.createElement("span");
+        badge.className = "user-badge";
+        badge.textContent = `x${user.count}`;
+        item.appendChild(badge);
+      }
+      userList.appendChild(item);
+    });
+};
+
+const setTypingIndicator = (users) => {
+  if (!typingIndicator) {
+    return;
+  }
+  const others = (Array.isArray(users) ? users : []).filter(
+    (name) => name && name !== currentUser
+  );
+  if (!others.length) {
+    typingIndicator.textContent = "";
+    typingIndicator.classList.remove("show");
+    return;
+  }
+  const label =
+    others.length === 1
+      ? `${others[0]} is typing...`
+      : `${others.slice(0, 2).join(", ")} are typing...`;
+  typingIndicator.textContent = label;
+  typingIndicator.classList.add("show");
+};
+
+const emitTyping = (value) => {
+  if (!currentUser || !socket.connected) {
+    return;
+  }
+  if (isTyping === value) {
+    return;
+  }
+  isTyping = value;
+  socket.emit("typing", { isTyping: value });
+  if (!value) {
+    clearTimeout(typingTimer);
+  }
+};
+
+const scheduleTypingStop = () => {
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    emitTyping(false);
+  }, 2000);
+};
+
 const scrollToBottom = () => {
   if (!chatPanel) {
     return;
@@ -343,10 +426,186 @@ const updateMessageReactions = (messageId, reactions) => {
   }
 };
 
+const setEditTarget = (message) => {
+  if (!message?.id || message.type !== "text" || message.deleted) {
+    return;
+  }
+  editTarget = {
+    id: message.id,
+    text: message.text || "",
+  };
+  clearReplyTarget();
+  editText.textContent = "Editing your message";
+  editBanner.classList.add("show");
+  input.value = message.text || "";
+  input.focus();
+};
+
+const clearEditTarget = () => {
+  editTarget = null;
+  editText.textContent = "";
+  editBanner.classList.remove("show");
+};
+
+const renderMeta = (meta, message) => {
+  meta.innerHTML = "";
+  const user = document.createElement("span");
+  user.className = "message-user";
+  user.textContent = message.user || "Unknown";
+  const time = document.createElement("span");
+  time.className = "message-time";
+  time.textContent = formatTime(message.timestamp);
+  if (message.edited) {
+    const edited = document.createElement("span");
+    edited.className = "edited-label";
+    edited.textContent = "edited";
+    time.appendChild(edited);
+  }
+  meta.appendChild(user);
+  meta.appendChild(time);
+};
+
+const renderMessageText = (message, container, shouldScroll) => {
+  container.innerHTML = "";
+  container.className = "message-text";
+  if (message.deleted) {
+    container.classList.add("deleted");
+    container.textContent = "Message deleted";
+    return;
+  }
+  if (message.replyTo) {
+    const reply = document.createElement("div");
+    reply.className = "reply-preview";
+    const replyUser = document.createElement("span");
+    replyUser.className = "reply-user";
+    replyUser.textContent = message.replyTo.user || "Unknown";
+    const replySnippet = document.createElement("span");
+    replySnippet.className = "reply-snippet";
+    replySnippet.textContent = message.replyTo.text || "";
+    reply.appendChild(replyUser);
+    reply.appendChild(replySnippet);
+    container.appendChild(reply);
+  }
+
+  const messageType = message.type || (message.file ? "file" : "text");
+  if (messageType === "file" && message.file?.url) {
+    const file = message.file;
+    if (file.kind === "video") {
+      const video = document.createElement("video");
+      video.className = "message-video";
+      video.src = file.url;
+      video.controls = true;
+      video.playsInline = true;
+      video.addEventListener("loadedmetadata", () => {
+        handleNewMessageScroll(shouldScroll);
+      });
+      container.appendChild(video);
+    } else {
+      const image = document.createElement("img");
+      image.className = "message-image";
+      image.src = file.url;
+      image.alt = file.name || "Image";
+      image.loading = "lazy";
+      image.addEventListener("load", () => {
+        handleNewMessageScroll(shouldScroll);
+      });
+      container.appendChild(image);
+    }
+  } else {
+    const messageText = String(message.text || "");
+    if (isGifUrl(messageText)) {
+      const image = document.createElement("img");
+      image.className = "message-gif";
+      image.src = messageText;
+      image.alt = "GIF";
+      image.loading = "lazy";
+      image.addEventListener("load", () => {
+        handleNewMessageScroll(shouldScroll);
+      });
+      container.appendChild(image);
+    } else {
+      const textNode = document.createElement("span");
+      textNode.textContent = messageText;
+      container.appendChild(textNode);
+    }
+  }
+};
+
+const renderMessageActions = (message) => {
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+  if (!message.deleted) {
+    const replyButton = document.createElement("button");
+    replyButton.type = "button";
+    replyButton.className = "reply-button";
+    replyButton.textContent = "Reply";
+    replyButton.addEventListener("click", () => {
+      setReplyTarget(message);
+    });
+    actions.appendChild(replyButton);
+    actions.appendChild(buildReactionBar(message));
+  }
+  if (message.user === currentUser && !message.deleted) {
+    if (message.type === "text") {
+      const editButton = document.createElement("button");
+      editButton.type = "button";
+      editButton.className = "edit-button";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => {
+        setEditTarget(message);
+      });
+      actions.appendChild(editButton);
+    }
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "delete-button";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => {
+      socket.emit("delete_message", { messageId: message.id });
+    });
+    actions.appendChild(deleteButton);
+  }
+  return actions;
+};
+
+const updateMessageElement = (message) => {
+  if (!message?.id) {
+    return;
+  }
+  messagesById.set(message.id, message);
+  const item = document.querySelector(`[data-message-id="${message.id}"]`);
+  if (!item) {
+    return;
+  }
+  if (message.user === currentUser) {
+    item.classList.add("self");
+  } else {
+    item.classList.remove("self");
+  }
+  const meta = item.querySelector(".message-meta");
+  if (meta) {
+    renderMeta(meta, message);
+  }
+  const text = item.querySelector(".message-text");
+  const shouldScroll = isNearBottom();
+  if (text) {
+    renderMessageText(message, text, shouldScroll);
+  }
+  const actions = item.querySelector(".message-actions");
+  if (actions) {
+    actions.remove();
+  }
+  if (!message.deleted) {
+    item.appendChild(renderMessageActions(message));
+  }
+  handleNewMessageScroll(shouldScroll);
+};
+
 const setReplyTarget = (message) => {
   if (!message?.id) {
     return;
   }
+  clearEditTarget();
   replyTarget = {
     id: message.id,
     user: message.user || "Unknown",
@@ -385,91 +644,16 @@ const addChatMessage = (message) => {
 
   const meta = document.createElement("div");
   meta.className = "message-meta";
-
-  const user = document.createElement("span");
-  user.className = "message-user";
-  user.textContent = message.user;
-
-  const time = document.createElement("span");
-  time.className = "message-time";
-  time.textContent = formatTime(message.timestamp);
-
-  meta.appendChild(user);
-  meta.appendChild(time);
+  renderMeta(meta, message);
 
   const text = document.createElement("div");
   text.className = "message-text";
-  const messageType = message.type || (message.file ? "file" : "text");
-  if (message.replyTo) {
-    const reply = document.createElement("div");
-    reply.className = "reply-preview";
-    const replyUser = document.createElement("span");
-    replyUser.className = "reply-user";
-    replyUser.textContent = message.replyTo.user || "Unknown";
-    const replySnippet = document.createElement("span");
-    replySnippet.className = "reply-snippet";
-    replySnippet.textContent = message.replyTo.text || "";
-    reply.appendChild(replyUser);
-    reply.appendChild(replySnippet);
-    text.appendChild(reply);
-  }
-  if (messageType === "file" && message.file?.url) {
-    const file = message.file;
-    if (file.kind === "video") {
-      const video = document.createElement("video");
-      video.className = "message-video";
-      video.src = file.url;
-      video.controls = true;
-      video.playsInline = true;
-      video.addEventListener("loadedmetadata", () => {
-        handleNewMessageScroll(shouldScroll);
-      });
-      text.appendChild(video);
-    } else {
-      const image = document.createElement("img");
-      image.className = "message-image";
-      image.src = file.url;
-      image.alt = file.name || "Image";
-      image.loading = "lazy";
-      image.addEventListener("load", () => {
-        handleNewMessageScroll(shouldScroll);
-      });
-      text.appendChild(image);
-    }
-  } else {
-    const messageText = String(message.text || "");
-    if (isGifUrl(messageText)) {
-      const image = document.createElement("img");
-      image.className = "message-gif";
-      image.src = messageText;
-      image.alt = "GIF";
-      image.loading = "lazy";
-      image.addEventListener("load", () => {
-        handleNewMessageScroll(shouldScroll);
-      });
-      text.appendChild(image);
-    } else {
-      const textNode = document.createElement("span");
-      textNode.textContent = messageText;
-      text.appendChild(textNode);
-    }
-  }
+  renderMessageText(message, text, shouldScroll);
 
   item.appendChild(meta);
   item.appendChild(text);
-  if (message.id) {
-    const actions = document.createElement("div");
-    actions.className = "message-actions";
-    const replyButton = document.createElement("button");
-    replyButton.type = "button";
-    replyButton.className = "reply-button";
-    replyButton.textContent = "Reply";
-    replyButton.addEventListener("click", () => {
-      setReplyTarget(message);
-    });
-    actions.appendChild(replyButton);
-    actions.appendChild(buildReactionBar(message));
-    item.appendChild(actions);
+  if (message.id && !message.deleted) {
+    item.appendChild(renderMessageActions(message));
   }
   messagesList.appendChild(item);
   handleNewMessageScroll(shouldScroll);
@@ -530,6 +714,7 @@ const openOverlay = () => {
   closeEmojiPanel();
   closeGifPanel();
   setUploadError("");
+  emitTyping(false);
 };
 
 const closeOverlay = () => {
@@ -566,6 +751,7 @@ const sendGifUrl = (url) => {
     text: url,
     replyTo: replyTarget ? { id: replyTarget.id } : null,
   });
+  emitTyping(false);
   clearReplyTarget();
   closeGifPanel();
 };
@@ -663,6 +849,7 @@ const handleFileUpload = (file) => {
         kind: file.type.startsWith("video/") ? "video" : "image",
       },
     });
+    emitTyping(false);
     clearReplyTarget();
   };
   reader.onerror = () => {
@@ -839,6 +1026,10 @@ replyCancel.addEventListener("click", () => {
   clearReplyTarget();
 });
 
+editCancel.addEventListener("click", () => {
+  clearEditTarget();
+});
+
 buildEmojiPicker();
 
 emojiToggle.addEventListener("click", () => {
@@ -868,6 +1059,18 @@ gifSearchInput.addEventListener("keydown", (event) => {
     event.preventDefault();
     searchGifs();
   }
+});
+
+input.addEventListener("input", () => {
+  if (!currentUser) {
+    return;
+  }
+  emitTyping(true);
+  scheduleTypingStop();
+});
+
+input.addEventListener("blur", () => {
+  emitTyping(false);
 });
 
 if (chatPanel) {
@@ -948,6 +1151,17 @@ form.addEventListener("submit", (event) => {
     openOverlay();
     return;
   }
+  if (editTarget) {
+    if (!text) {
+      return;
+    }
+    socket.emit("edit_message", { messageId: editTarget.id, text });
+    clearEditTarget();
+    emitTyping(false);
+    input.value = "";
+    input.focus();
+    return;
+  }
   if (!text) {
     return;
   }
@@ -955,6 +1169,7 @@ form.addEventListener("submit", (event) => {
     text,
     replyTo: replyTarget ? { id: replyTarget.id } : null,
   });
+  emitTyping(false);
   clearReplyTarget();
   input.value = "";
   input.focus();
@@ -967,6 +1182,8 @@ socket.on("connect", () => {
 socket.on("disconnect", () => {
   setStatus("Offline", "status-offline");
   endCall(false);
+  emitTyping(false);
+  setTypingIndicator([]);
 });
 
 socket.on("auth_ok", (payload) => {
@@ -977,6 +1194,7 @@ socket.on("auth_ok", (payload) => {
   closeEmojiPanel();
   setUploadError("");
   clearReplyTarget();
+  clearEditTarget();
   updateCallButtons();
 });
 
@@ -985,6 +1203,7 @@ socket.on("auth_error", (message) => {
   setJoinError(message || "Incorrect password.");
   passwordInput.value = "";
   clearReplyTarget();
+  clearEditTarget();
   openOverlay();
 });
 
@@ -1058,11 +1277,23 @@ socket.on("message", (message) => {
   }
 });
 
+socket.on("message_update", (message) => {
+  updateMessageElement(message);
+});
+
 socket.on("reaction_update", (payload) => {
   if (!payload?.messageId) {
     return;
   }
   updateMessageReactions(payload.messageId, payload.reactions);
+});
+
+socket.on("presence_update", (payload) => {
+  updatePresence(payload);
+});
+
+socket.on("typing_update", (payload) => {
+  setTypingIndicator(payload?.users || []);
 });
 
 socket.on("system", (text) => {

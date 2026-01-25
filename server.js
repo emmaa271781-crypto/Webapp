@@ -17,6 +17,8 @@ const GIF_LIMIT = 12;
 const MAX_FILE_CHARS = 4_500_000;
 const ROOM_NAME = "main";
 const messageHistory = [];
+const connectedUsers = new Map();
+const typingUsers = new Map();
 
 app.use(express.static(path.join(__dirname, "public")));
 
@@ -118,6 +120,13 @@ const buildReplyPreview = (message) => {
   if (!message) {
     return null;
   }
+  if (message.deleted) {
+    return {
+      id: message.id,
+      user: message.user,
+      text: "Message deleted",
+    };
+  }
   const preview = message.type === "file"
     ? `[${message.file?.kind || "file"}] ${message.file?.name || "attachment"}`
     : String(message.text || "").trim().slice(0, 120);
@@ -165,6 +174,24 @@ const addMessageToHistory = (message) => {
   }
 };
 
+const emitPresence = () => {
+  const counts = {};
+  for (const name of connectedUsers.values()) {
+    counts[name] = (counts[name] || 0) + 1;
+  }
+  const users = Object.entries(counts).map(([name, count]) => ({
+    name,
+    count,
+  }));
+  const total = users.reduce((sum, user) => sum + user.count, 0);
+  io.to(ROOM_NAME).emit("presence_update", { users, total });
+};
+
+const emitTyping = () => {
+  const names = Array.from(new Set(typingUsers.values()));
+  io.to(ROOM_NAME).emit("typing_update", { users: names });
+};
+
 const toggleReaction = (message, emoji, username) => {
   if (!message.reactions) {
     message.reactions = {};
@@ -203,9 +230,13 @@ io.on("connection", (socket) => {
     socket.data.username = username;
     socket.data.authed = true;
     socket.join(ROOM_NAME);
+    connectedUsers.set(socket.id, username);
+    typingUsers.delete(socket.id);
 
     socket.emit("auth_ok", { username });
     socket.emit("history", messageHistory);
+    emitPresence();
+    emitTyping();
 
     if (previousName && previousName !== username) {
       socket.broadcast.emit(
@@ -233,10 +264,12 @@ io.on("connection", (socket) => {
       message = {
         id: randomUUID(),
         user: socket.data.username,
+        senderId: socket.id,
         type: "file",
         file,
         replyTo,
         reactions: {},
+        edited: false,
         timestamp: new Date().toISOString(),
       };
     } else {
@@ -247,15 +280,30 @@ io.on("connection", (socket) => {
       message = {
         id: randomUUID(),
         user: socket.data.username,
+        senderId: socket.id,
         type: "text",
         text,
         replyTo,
         reactions: {},
+        edited: false,
         timestamp: new Date().toISOString(),
       };
     }
     addMessageToHistory(message);
     io.to(ROOM_NAME).emit("message", message);
+  });
+
+  socket.on("typing", (payload) => {
+    if (!socket.data.authed || !socket.data.username) {
+      return;
+    }
+    const isTyping = Boolean(payload?.isTyping);
+    if (isTyping) {
+      typingUsers.set(socket.id, socket.data.username);
+    } else {
+      typingUsers.delete(socket.id);
+    }
+    emitTyping();
   });
 
   socket.on("react", (payload) => {
@@ -271,11 +319,64 @@ io.on("connection", (socket) => {
     if (!message) {
       return;
     }
+    if (message.deleted) {
+      return;
+    }
     const reactions = toggleReaction(message, emoji, socket.data.username);
     io.to(ROOM_NAME).emit("reaction_update", {
       messageId: message.id,
       reactions,
     });
+  });
+
+  socket.on("edit_message", (payload) => {
+    if (!socket.data.authed || !socket.data.username) {
+      return;
+    }
+    const messageId = String(payload?.messageId || "").trim();
+    const text = sanitizeMessage(payload?.text);
+    if (!messageId || !text) {
+      return;
+    }
+    const message = messageHistory.find((item) => item.id === messageId);
+    if (!message || message.deleted) {
+      return;
+    }
+    if (message.senderId !== socket.id) {
+      return;
+    }
+    if (message.type !== "text") {
+      return;
+    }
+    message.text = text;
+    message.edited = true;
+    message.editedAt = new Date().toISOString();
+    io.to(ROOM_NAME).emit("message_update", message);
+  });
+
+  socket.on("delete_message", (payload) => {
+    if (!socket.data.authed || !socket.data.username) {
+      return;
+    }
+    const messageId = String(payload?.messageId || "").trim();
+    if (!messageId) {
+      return;
+    }
+    const message = messageHistory.find((item) => item.id === messageId);
+    if (!message || message.deleted) {
+      return;
+    }
+    if (message.senderId !== socket.id) {
+      return;
+    }
+    message.deleted = true;
+    message.text = "";
+    message.type = "text";
+    message.file = null;
+    message.reactions = {};
+    message.replyTo = null;
+    message.deletedAt = new Date().toISOString();
+    io.to(ROOM_NAME).emit("message_update", message);
   });
 
   socket.on("webrtc_offer", (payload) => {
@@ -322,6 +423,10 @@ io.on("connection", (socket) => {
         `${socket.data.username} left the chat`
       );
     }
+    connectedUsers.delete(socket.id);
+    typingUsers.delete(socket.id);
+    emitPresence();
+    emitTyping();
   });
 });
 
