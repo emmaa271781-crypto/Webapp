@@ -39,6 +39,8 @@ const remotePlaceholder = document.getElementById("remote-placeholder");
 const localStatus = document.getElementById("local-status");
 const remoteStatus = document.getElementById("remote-status");
 const callStatus = document.getElementById("call-status");
+const localTile = document.getElementById("local-tile");
+const remoteTile = document.getElementById("remote-tile");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
 const editBanner = document.getElementById("edit-banner");
@@ -68,6 +70,8 @@ let remoteHasVideo = false;
 let remotePeerId = null;
 let isPolite = false;
 let ignoreOffer = false;
+let localVad = null;
+let remoteVad = null;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -248,6 +252,58 @@ const applyVoiceConstraints = async () => {
   } catch (error) {
     // Ignore constraint failures.
   }
+};
+
+const stopVad = (vad) => {
+  if (!vad) {
+    return;
+  }
+  if (vad.rafId) {
+    cancelAnimationFrame(vad.rafId);
+  }
+  if (vad.ctx && vad.ctx.state !== "closed") {
+    vad.ctx.close();
+  }
+};
+
+const startVad = (stream, tile, getActive) => {
+  if (!stream || !tile) {
+    return null;
+  }
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) {
+    return null;
+  }
+  const ctx = new AudioContextClass();
+  const source = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 256;
+  source.connect(analyser);
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  const vad = { ctx, analyser, data, rafId: null };
+
+  const tick = () => {
+    if (!getActive()) {
+      tile.classList.remove("speaking");
+      vad.rafId = requestAnimationFrame(tick);
+      return;
+    }
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 1) {
+      const value = (data[i] - 128) / 128;
+      sum += value * value;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    if (rms > 0.08) {
+      tile.classList.add("speaking");
+    } else {
+      tile.classList.remove("speaking");
+    }
+    vad.rafId = requestAnimationFrame(tick);
+  };
+  vad.rafId = requestAnimationFrame(tick);
+  return vad;
 };
 
 const urlBase64ToUint8Array = (base64String) => {
@@ -916,6 +972,9 @@ const applyMicState = () => {
   localStream.getAudioTracks().forEach((track) => {
     track.enabled = !isMicMuted;
   });
+  if (isMicMuted && localTile) {
+    localTile.classList.remove("speaking");
+  }
 };
 
 const updateLocalStatus = () => {
@@ -948,6 +1007,9 @@ const updateRemoteStatus = () => {
     remotePlaceholder.classList.toggle("hidden", remoteHasVideo);
   }
   remoteVideo.classList.toggle("hidden", !remoteHasVideo);
+  if (remoteTile && !remoteHasAudio) {
+    remoteTile.classList.remove("speaking");
+  }
   updateCallStatus();
 };
 
@@ -1163,6 +1225,14 @@ const createPeerConnection = async () => {
     remoteStream.addTrack(event.track);
     if (event.track.kind === "audio") {
       remoteHasAudio = true;
+      if (remoteVad) {
+        stopVad(remoteVad);
+      }
+      remoteVad = startVad(
+        remoteStream,
+        remoteTile,
+        () => remoteHasAudio
+      );
     }
     if (event.track.kind === "video") {
       remoteHasVideo = true;
@@ -1194,6 +1264,10 @@ const createPeerConnection = async () => {
       const videoTracks = remoteStream ? remoteStream.getVideoTracks() : [];
       remoteHasAudio = audioTracks.some((track) => track.readyState === "live");
       remoteHasVideo = videoTracks.some((track) => track.readyState === "live");
+      if (!remoteHasAudio && remoteVad) {
+        stopVad(remoteVad);
+        remoteVad = null;
+      }
       updateRemoteStatus();
     });
   };
@@ -1305,6 +1379,14 @@ const endCall = (notifyPeer) => {
   isCameraEnabled = false;
   remoteHasAudio = false;
   remoteHasVideo = false;
+  if (localVad) {
+    stopVad(localVad);
+    localVad = null;
+  }
+  if (remoteVad) {
+    stopVad(remoteVad);
+    remoteVad = null;
+  }
   hideCallPanel();
   updateLocalVideoPreview();
   updateCallButtons();
@@ -1321,9 +1403,11 @@ const startCall = async () => {
   }
   try {
     await createPeerConnection();
-    isInCall = true;
-    isMicMuted = true;
-    isCameraEnabled = false;
+    if (!isInCall) {
+      isInCall = true;
+      isMicMuted = true;
+      isCameraEnabled = false;
+    }
     showCallPanel();
     updateLocalVideoPreview();
     updateCallButtons();
@@ -1550,6 +1634,10 @@ micToggle.addEventListener("click", () => {
         track.enabled = true;
         await applyVoiceConstraints();
         await attachAudioTrack(track);
+        if (localVad) {
+          stopVad(localVad);
+        }
+        localVad = startVad(localStream, localTile, () => !isMicMuted);
         updateCallButtons();
       } catch (error) {
         addSystemMessage("Microphone access denied.");
@@ -1561,6 +1649,10 @@ micToggle.addEventListener("click", () => {
   }
   isMicMuted = true;
   applyMicState();
+  if (localVad) {
+    stopVad(localVad);
+    localVad = null;
+  }
   updateCallButtons();
 });
 

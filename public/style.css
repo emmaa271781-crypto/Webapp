@@ -253,9 +253,9 @@ body {
 .call-panel {
   position: fixed;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: min(900px, 96vw);
+  top: 84px;
+  transform: translateX(-50%);
+  width: min(1020px, 96vw);
   max-height: 70vh;
   background: #111827;
   border: 1px solid #27334a;
@@ -306,6 +306,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+}
+
+.call-tile.speaking {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
 }
 
 .call-label {
@@ -770,7 +775,8 @@ body {
   }
 
   .call-panel {
-    width: 92vw;
+    width: 94vw;
+    top: 76px;
     max-height: 60vh;
     padding: 0.75rem;
   }
