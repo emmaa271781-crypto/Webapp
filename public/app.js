@@ -85,6 +85,7 @@ let bannerDismissed = false;
 let callConnected = false;
 let currentAvatarUrl = "";
 let remoteProfile = { name: "Remote", avatar: "" };
+let pendingIce = [];
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -219,6 +220,12 @@ const updateRemotePeer = (from) => {
   }
   remotePeerId = from;
   updateCallStatus();
+  if (pendingIce.length) {
+    pendingIce.forEach((candidate) => {
+      socket.emit("webrtc_ice", { candidate, to: remotePeerId });
+    });
+    pendingIce = [];
+  }
 };
 
 const updateVoiceButton = () => {
@@ -1317,7 +1324,11 @@ const createPeerConnection = async () => {
 
   peerConnection.onicecandidate = (event) => {
     if (event.candidate) {
-      socket.emit("webrtc_ice", { candidate: event.candidate });
+      if (remotePeerId) {
+        socket.emit("webrtc_ice", { candidate: event.candidate, to: remotePeerId });
+      } else {
+        pendingIce.push(event.candidate);
+      }
     }
   };
 
@@ -1531,6 +1542,7 @@ const endCall = (notifyPeer) => {
   remoteHasAudio = false;
   remoteHasVideo = false;
   callConnected = false;
+  pendingIce = [];
   if (localVad) {
     stopVad(localVad);
     localVad = null;
@@ -2102,8 +2114,9 @@ socket.on("call_ended", () => {
   }
 });
 
-socket.on("call_negotiate", async () => {
+socket.on("call_negotiate", async (payload) => {
   if (callRole === "caller") {
+    updateRemotePeer(payload?.from);
     await negotiate();
   }
 });
