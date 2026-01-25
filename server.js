@@ -128,6 +128,36 @@ const sanitizeDisplayName = (value) => {
   return name.slice(0, 32);
 };
 
+const sanitizeAvatar = (value) => {
+  const url = String(value || "").trim();
+  if (!url) {
+    return "";
+  }
+  if (url.startsWith("data:image/") && url.length < 300000) {
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    if (["http:", "https:"].includes(parsed.protocol)) {
+      return url;
+    }
+  } catch (error) {
+    return "";
+  }
+  return "";
+};
+
+const getSocketInfo = (socketId) => {
+  const socket = io.sockets.sockets.get(socketId);
+  if (!socket) {
+    return { name: connectedUsers.get(socketId) || "Someone", avatar: "" };
+  }
+  return {
+    name: socket.data.username || connectedUsers.get(socketId) || "Someone",
+    avatar: socket.data.avatar || "",
+  };
+};
+
 app.get("/api/vapid-public-key", (req, res) => {
   if (!hasVapidKeys) {
     res.status(400).json({ error: "Push notifications not configured." });
@@ -345,6 +375,7 @@ io.on("connection", (socket) => {
 
     const previousName = socket.data.username;
     socket.data.username = username;
+    socket.data.avatar = sanitizeAvatar(payload?.avatar);
     socket.data.authed = true;
     socket.join(ROOM_NAME);
     connectedUsers.set(socket.id, username);
@@ -389,10 +420,29 @@ io.on("connection", (socket) => {
       callState.calleeId = socket.id;
       callPeers.set(callState.callerId, socket.id);
       callPeers.set(socket.id, callState.callerId);
-      socket.emit("call_joined", { role: "callee", peerId: callState.callerId });
-      io.to(callState.callerId).emit("call_peer", { peerId: socket.id });
-      io.to(callState.callerId).emit("call_connected", { peerId: socket.id });
-      socket.emit("call_connected", { peerId: callState.callerId });
+      const callerInfo = getSocketInfo(callState.callerId);
+      const calleeInfo = getSocketInfo(socket.id);
+      socket.emit("call_joined", {
+        role: "callee",
+        peerId: callState.callerId,
+        peerName: callerInfo.name,
+        peerAvatar: callerInfo.avatar,
+      });
+      io.to(callState.callerId).emit("call_peer", {
+        peerId: socket.id,
+        peerName: calleeInfo.name,
+        peerAvatar: calleeInfo.avatar,
+      });
+      io.to(callState.callerId).emit("call_connected", {
+        peerId: socket.id,
+        peerName: calleeInfo.name,
+        peerAvatar: calleeInfo.avatar,
+      });
+      socket.emit("call_connected", {
+        peerId: callState.callerId,
+        peerName: callerInfo.name,
+        peerAvatar: callerInfo.avatar,
+      });
       return;
     }
     socket.emit("call_busy");
@@ -400,6 +450,22 @@ io.on("connection", (socket) => {
 
   socket.on("call_leave", () => {
     removeFromCall(socket.id);
+  });
+
+  socket.on("avatar_update", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    socket.data.avatar = sanitizeAvatar(payload?.avatar);
+    const peerId = callPeers.get(socket.id);
+    if (peerId) {
+      const info = getSocketInfo(socket.id);
+      io.to(peerId).emit("call_peer_update", {
+        peerId: socket.id,
+        peerName: info.name,
+        peerAvatar: info.avatar,
+      });
+    }
   });
 
   socket.on("message", (payload) => {

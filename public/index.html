@@ -36,6 +36,9 @@
           <button id="call-end" class="call-button danger" type="button" disabled>
             Hang up
           </button>
+          <button id="avatar-toggle" class="header-button" type="button">
+            Set Avatar
+          </button>
           <button id="sound-toggle" class="header-button" type="button">
             Sound: Off
           </button>
@@ -77,7 +80,7 @@
             </div>
             <div class="call-grid">
               <div id="remote-tile" class="call-tile">
-                <div class="call-label">Remote</div>
+                <div id="remote-label" class="call-label">Remote</div>
                 <div class="call-media">
                   <video
                     id="remote-video"
@@ -86,6 +89,7 @@
                     playsinline
                   ></video>
                   <audio id="remote-audio" autoplay></audio>
+                  <div id="remote-avatar" class="call-avatar">R</div>
                   <div id="remote-placeholder" class="call-placeholder">
                     Waiting for video
                   </div>
@@ -93,7 +97,7 @@
                 <div id="remote-status" class="call-status">Waiting...</div>
               </div>
               <div id="local-tile" class="call-tile">
-                <div class="call-label">You</div>
+                <div id="local-label" class="call-label">You</div>
                 <div class="call-media">
                   <video
                     id="local-video"
@@ -102,6 +106,7 @@
                     muted
                     playsinline
                   ></video>
+                  <div id="local-avatar" class="call-avatar">Y</div>
                   <div id="local-placeholder" class="call-placeholder">
                     Camera off
                   </div>

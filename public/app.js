@@ -42,10 +42,15 @@ const remoteStatus = document.getElementById("remote-status");
 const callStatus = document.getElementById("call-status");
 const localTile = document.getElementById("local-tile");
 const remoteTile = document.getElementById("remote-tile");
+const localLabel = document.getElementById("local-label");
+const remoteLabel = document.getElementById("remote-label");
+const localAvatar = document.getElementById("local-avatar");
+const remoteAvatar = document.getElementById("remote-avatar");
 const callBanner = document.getElementById("call-banner");
 const callBannerText = document.getElementById("call-banner-text");
 const callBannerJoin = document.getElementById("call-banner-join");
 const callBannerDismiss = document.getElementById("call-banner-dismiss");
+const avatarToggle = document.getElementById("avatar-toggle");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
 const editBanner = document.getElementById("edit-banner");
@@ -78,6 +83,8 @@ let remoteVad = null;
 let callRole = null;
 let bannerDismissed = false;
 let callConnected = false;
+let currentAvatarUrl = "";
+let remoteProfile = { name: "Remote", avatar: "" };
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -211,6 +218,7 @@ const updateRemotePeer = (from) => {
     return;
   }
   remotePeerId = from;
+  updateCallStatus();
 };
 
 const updateVoiceButton = () => {
@@ -234,6 +242,78 @@ const loadSetting = (key) => {
   } catch (error) {
     return false;
   }
+};
+
+const sanitizeAvatarUrl = (value) => {
+  const url = String(value || "").trim();
+  if (!url) {
+    return "";
+  }
+  if (url.startsWith("data:image/") && url.length < 300000) {
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    if (["http:", "https:"].includes(parsed.protocol)) {
+      return url;
+    }
+  } catch (error) {
+    return "";
+  }
+  return "";
+};
+
+const applyAvatar = (element, name, url) => {
+  if (!element) {
+    return;
+  }
+  const safeUrl = sanitizeAvatarUrl(url);
+  if (safeUrl) {
+    element.style.backgroundImage = `url("${safeUrl.replace(/"/g, "")}")`;
+    element.classList.add("has-image");
+    element.textContent = "";
+    return;
+  }
+  element.style.backgroundImage = "none";
+  element.classList.remove("has-image");
+  const initial = name ? name.trim()[0] : "?";
+  element.textContent = initial ? initial.toUpperCase() : "?";
+};
+
+const updateLocalIdentity = () => {
+  if (localLabel) {
+    localLabel.textContent = currentUser ? `${currentUser} (You)` : "You";
+  }
+  applyAvatar(localAvatar, currentUser || "You", currentAvatarUrl);
+};
+
+const updateRemoteIdentity = (payload) => {
+  remoteProfile = {
+    name: payload?.peerName || remoteProfile.name || "Remote",
+    avatar: payload?.peerAvatar || remoteProfile.avatar || "",
+  };
+  if (remoteLabel) {
+    remoteLabel.textContent = remoteProfile.name || "Remote";
+  }
+  applyAvatar(remoteAvatar, remoteProfile.name, remoteProfile.avatar);
+};
+
+const clearRemoteIdentity = () => {
+  remoteProfile = { name: "Remote", avatar: "" };
+  if (remoteLabel) {
+    remoteLabel.textContent = "Remote";
+  }
+  applyAvatar(remoteAvatar, "Remote", "");
+};
+
+const ensureRemoteAudioPlayback = () => {
+  if (!remoteAudio) {
+    return;
+  }
+  remoteAudio.muted = false;
+  remoteAudio.play().catch(() => {
+    // Autoplay might be blocked; user gesture will unblock.
+  });
 };
 
 const getAudioConstraints = () => ({
@@ -1531,7 +1611,12 @@ joinForm.addEventListener("submit", (event) => {
     return;
   }
   setJoinError("");
-  socket.emit("join", { username: name.slice(0, 32), password });
+  currentAvatarUrl = sanitizeAvatarUrl(currentAvatarUrl);
+  socket.emit("join", {
+    username: name.slice(0, 32),
+    password,
+    avatar: currentAvatarUrl,
+  });
 });
 
 replyCancel.addEventListener("click", () => {
@@ -1653,11 +1738,13 @@ fileInput.addEventListener("change", () => {
 });
 
 callStartButton.addEventListener("click", () => {
+  ensureRemoteAudioPlayback();
   startCall();
 });
 
 if (callBannerJoin) {
   callBannerJoin.addEventListener("click", () => {
+    ensureRemoteAudioPlayback();
     startCall();
   });
 }
@@ -1666,6 +1753,25 @@ if (callBannerDismiss) {
   callBannerDismiss.addEventListener("click", () => {
     bannerDismissed = true;
     hideCallBanner();
+  });
+}
+
+if (avatarToggle) {
+  avatarToggle.addEventListener("click", () => {
+    const next = window.prompt("Paste an avatar URL (https://...)", currentAvatarUrl || "");
+    if (next === null) {
+      return;
+    }
+    currentAvatarUrl = sanitizeAvatarUrl(next);
+    try {
+      localStorage.setItem("avatarUrl", currentAvatarUrl);
+    } catch (error) {
+      // Ignore storage errors.
+    }
+    updateLocalIdentity();
+    if (currentUser) {
+      socket.emit("avatar_update", { avatar: currentAvatarUrl });
+    }
   });
 }
 
@@ -1831,6 +1937,7 @@ socket.on("auth_ok", (payload) => {
   clearReplyTarget();
   clearEditTarget();
   updateCallButtons();
+  updateLocalIdentity();
   if (notifyEnabled) {
     syncPushSubscription();
   }
@@ -1919,6 +2026,7 @@ socket.on("webrtc_hangup", () => {
 socket.on("call_joined", async (payload) => {
   callRole = payload?.role || "caller";
   updateRemotePeer(payload?.peerId);
+  updateRemoteIdentity(payload);
   if (isInCall) {
     return;
   }
@@ -1945,6 +2053,7 @@ socket.on("call_joined", async (payload) => {
 
 socket.on("call_peer", async (payload) => {
   updateRemotePeer(payload?.peerId);
+  updateRemoteIdentity(payload);
   callConnected = false;
   updateCallStatus();
   if (callRole === "caller") {
@@ -1958,8 +2067,14 @@ socket.on("call_started", (payload) => {
   showCallBanner(`${name} started a call. Click Join Call to connect.`);
 });
 
-socket.on("call_connected", () => {
+socket.on("call_connected", (payload) => {
+  updateRemoteIdentity(payload);
+  callConnected = true;
   updateCallStatus();
+});
+
+socket.on("call_peer_update", (payload) => {
+  updateRemoteIdentity(payload);
 });
 
 socket.on("call_status", (payload) => {
@@ -1975,6 +2090,7 @@ socket.on("call_busy", () => {
 
 socket.on("call_peer_left", () => {
   endCall(false);
+  clearRemoteIdentity();
 });
 
 socket.on("call_ended", () => {
@@ -2036,6 +2152,11 @@ hideCallPanel();
 soundEnabled = loadSetting("soundEnabled");
 notifyEnabled = loadSetting("notifyEnabled");
 try {
+  currentAvatarUrl = sanitizeAvatarUrl(localStorage.getItem("avatarUrl"));
+} catch (error) {
+  currentAvatarUrl = "";
+}
+try {
   const storedVoice = localStorage.getItem("voiceIsolationEnabled");
   voiceIsolationEnabled = storedVoice === null ? true : storedVoice === "true";
 } catch (error) {
@@ -2049,6 +2170,7 @@ updateSoundButton();
 updateNotifyButton();
 updateVoiceButton();
 updateTitle();
+updateLocalIdentity();
 if (pushSupported) {
   registerServiceWorker();
 }
