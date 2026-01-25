@@ -27,6 +27,8 @@ const fileInput = document.getElementById("file-input");
 const uploadError = document.getElementById("upload-error");
 const callStartButton = document.getElementById("call-start");
 const callShareButton = document.getElementById("call-share");
+const micToggle = document.getElementById("mic-toggle");
+const camToggle = document.getElementById("cam-toggle");
 const callEndButton = document.getElementById("call-end");
 const callPanel = document.getElementById("call-panel");
 const localVideo = document.getElementById("local-video");
@@ -48,6 +50,10 @@ let screenStream = null;
 let remoteStream = null;
 let isInCall = false;
 let isSharingScreen = false;
+let isMicMuted = false;
+let isCameraEnabled = false;
+let cameraTrack = null;
+let videoSender = null;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -787,7 +793,14 @@ const updateCallButtons = () => {
   callStartButton.disabled = isInCall;
   callEndButton.disabled = !isInCall;
   callShareButton.disabled = !isInCall;
+  micToggle.disabled = !isInCall;
+  camToggle.disabled = !isInCall;
+  callStartButton.textContent = isInCall ? "In Call" : "Join Call";
   callShareButton.textContent = isSharingScreen ? "Stop share" : "Share";
+  micToggle.textContent = isMicMuted ? "Mic: Off" : "Mic: On";
+  camToggle.textContent = isCameraEnabled ? "Cam: On" : "Cam: Off";
+  micToggle.classList.toggle("active", !isMicMuted);
+  camToggle.classList.toggle("active", isCameraEnabled);
 };
 
 const showCallPanel = () => {
@@ -796,6 +809,30 @@ const showCallPanel = () => {
 
 const hideCallPanel = () => {
   callPanel.classList.remove("show");
+};
+
+const updateLocalVideoPreview = () => {
+  if (isSharingScreen && screenStream) {
+    localVideo.srcObject = screenStream;
+    localVideo.classList.remove("hidden");
+    return;
+  }
+  if (isCameraEnabled && cameraTrack && localStream) {
+    localVideo.srcObject = localStream;
+    localVideo.classList.remove("hidden");
+    return;
+  }
+  localVideo.srcObject = null;
+  localVideo.classList.add("hidden");
+};
+
+const applyMicState = () => {
+  if (!localStream) {
+    return;
+  }
+  localStream.getAudioTracks().forEach((track) => {
+    track.enabled = !isMicMuted;
+  });
 };
 
 const openEmojiPanel = () => {
@@ -970,14 +1007,21 @@ const handleFileUpload = (file) => {
 };
 
 const ensureLocalStream = async () => {
-  if (localStream) {
+  if (localStream && localStream.getAudioTracks().length) {
     return localStream;
   }
-  localStream = await navigator.mediaDevices.getUserMedia({
-    video: true,
+  const audioStream = await navigator.mediaDevices.getUserMedia({
     audio: true,
+    video: false,
   });
-  localVideo.srcObject = localStream;
+  if (!localStream) {
+    localStream = new MediaStream();
+  }
+  audioStream.getAudioTracks().forEach((track) => {
+    localStream.addTrack(track);
+  });
+  applyMicState();
+  updateLocalVideoPreview();
   return localStream;
 };
 
@@ -1018,6 +1062,38 @@ const createPeerConnection = async () => {
   return peerConnection;
 };
 
+const getVideoSender = () => {
+  if (videoSender) {
+    return videoSender;
+  }
+  const sender = peerConnection
+    ?.getSenders()
+    .find((item) => item.track && item.track.kind === "video");
+  if (sender) {
+    videoSender = sender;
+  }
+  return sender || null;
+};
+
+const attachVideoTrack = async (track) => {
+  if (!peerConnection) {
+    return;
+  }
+  const sender = getVideoSender();
+  if (sender) {
+    await sender.replaceTrack(track);
+  } else if (localStream) {
+    videoSender = peerConnection.addTrack(track, localStream);
+  }
+};
+
+const clearVideoTrack = async () => {
+  const sender = getVideoSender();
+  if (sender) {
+    await sender.replaceTrack(null);
+  }
+};
+
 const endCall = (notifyPeer) => {
   if (notifyPeer) {
     socket.emit("webrtc_hangup");
@@ -1030,6 +1106,10 @@ const endCall = (notifyPeer) => {
     screenStream.getTracks().forEach((track) => track.stop());
     screenStream = null;
   }
+  if (cameraTrack) {
+    cameraTrack.stop();
+    cameraTrack = null;
+  }
   if (localStream) {
     localStream.getTracks().forEach((track) => track.stop());
     localStream = null;
@@ -1037,9 +1117,13 @@ const endCall = (notifyPeer) => {
   remoteStream = null;
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
+  videoSender = null;
   isInCall = false;
   isSharingScreen = false;
+  isMicMuted = false;
+  isCameraEnabled = false;
   hideCallPanel();
+  updateLocalVideoPreview();
   updateCallButtons();
 };
 
@@ -1059,9 +1143,10 @@ const startCall = async () => {
     socket.emit("webrtc_offer", { offer });
     isInCall = true;
     showCallPanel();
+    updateLocalVideoPreview();
     updateCallButtons();
   } catch (error) {
-    addSystemMessage("Call failed. Check permissions.");
+    addSystemMessage("Call failed. Check microphone permissions.");
     endCall(false);
   }
 };
@@ -1071,19 +1156,13 @@ const stopScreenShare = () => {
     screenStream.getTracks().forEach((track) => track.stop());
     screenStream = null;
   }
-  const cameraTrack = localStream?.getVideoTracks?.()[0];
-  if (peerConnection && cameraTrack) {
-    const sender = peerConnection
-      .getSenders()
-      .find((item) => item.track && item.track.kind === "video");
-    if (sender) {
-      sender.replaceTrack(cameraTrack);
-    }
-  }
-  if (localStream) {
-    localVideo.srcObject = localStream;
-  }
   isSharingScreen = false;
+  if (isCameraEnabled && cameraTrack) {
+    attachVideoTrack(cameraTrack);
+  } else {
+    clearVideoTrack();
+  }
+  updateLocalVideoPreview();
   updateCallButtons();
 };
 
@@ -1098,17 +1177,12 @@ const toggleScreenShare = async () => {
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
     const screenTrack = screenStream.getVideoTracks()[0];
-    const sender = peerConnection
-      .getSenders()
-      .find((item) => item.track && item.track.kind === "video");
-    if (sender) {
-      sender.replaceTrack(screenTrack);
-    }
+    await attachVideoTrack(screenTrack);
     screenTrack.onended = () => {
       stopScreenShare();
     };
-    localVideo.srcObject = screenStream;
     isSharingScreen = true;
+    updateLocalVideoPreview();
     updateCallButtons();
   } catch (error) {
     addSystemMessage("Screen share failed.");
@@ -1261,6 +1335,65 @@ callShareButton.addEventListener("click", () => {
 
 callEndButton.addEventListener("click", () => {
   endCall(true);
+});
+
+micToggle.addEventListener("click", () => {
+  if (!isInCall) {
+    return;
+  }
+  isMicMuted = !isMicMuted;
+  applyMicState();
+  updateCallButtons();
+});
+
+camToggle.addEventListener("click", async () => {
+  if (!isInCall) {
+    return;
+  }
+  if (isCameraEnabled) {
+    if (cameraTrack && localStream) {
+      localStream.removeTrack(cameraTrack);
+    }
+    if (cameraTrack) {
+      cameraTrack.stop();
+      cameraTrack = null;
+    }
+    isCameraEnabled = false;
+    if (!isSharingScreen) {
+      await clearVideoTrack();
+    }
+    updateLocalVideoPreview();
+    updateCallButtons();
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+    cameraTrack = stream.getVideoTracks()[0];
+    if (!localStream) {
+      localStream = new MediaStream();
+    }
+    localStream.addTrack(cameraTrack);
+    isCameraEnabled = true;
+    if (peerConnection && !isSharingScreen) {
+      await attachVideoTrack(cameraTrack);
+    }
+    cameraTrack.onended = () => {
+      if (!isCameraEnabled) {
+        return;
+      }
+      isCameraEnabled = false;
+      cameraTrack = null;
+      if (!isSharingScreen) {
+        clearVideoTrack();
+      }
+      updateLocalVideoPreview();
+      updateCallButtons();
+    };
+    updateLocalVideoPreview();
+    updateCallButtons();
+  } catch (error) {
+    addSystemMessage("Camera access denied.");
+  }
 });
 
 form.addEventListener("submit", (event) => {
