@@ -473,6 +473,33 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("profile_update", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    const nextName = sanitizeName(payload?.username);
+    const nextAvatar = sanitizeAvatar(payload?.avatar);
+    const prevName = socket.data.username;
+    if (nextName) {
+      socket.data.username = nextName;
+      connectedUsers.set(socket.id, nextName);
+    }
+    socket.data.avatar = nextAvatar;
+    emitPresence();
+    if (nextName && prevName && prevName !== nextName) {
+      socket.to(ROOM_NAME).emit("system", `${prevName} is now ${nextName}`);
+    }
+    const peerId = callPeers.get(socket.id);
+    if (peerId) {
+      const info = getSocketInfo(socket.id);
+      io.to(peerId).emit("call_peer_update", {
+        peerId: socket.id,
+        peerName: info.name,
+        peerAvatar: info.avatar,
+      });
+    }
+  });
+
   socket.on("message", (payload) => {
     if (!socket.data.authed || !socket.data.username) {
       return;

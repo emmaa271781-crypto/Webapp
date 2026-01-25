@@ -36,8 +36,8 @@
           <button id="call-end" class="call-button danger" type="button" disabled>
             Hang up
           </button>
-          <button id="avatar-toggle" class="header-button" type="button">
-            Set Avatar
+          <button id="profile-toggle" class="header-button" type="button">
+            Set Profile
           </button>
           <button id="sound-toggle" class="header-button" type="button">
             Sound: Off
@@ -211,6 +211,28 @@
         />
         <p id="join-error" class="error" aria-live="polite"></p>
         <button type="submit">Enter chat</button>
+      </form>
+    </div>
+
+    <div id="profile-overlay" class="overlay">
+      <form id="profile-form" class="profile-card">
+        <h2>Set Profile</h2>
+        <p>Update your name and avatar.</p>
+        <input
+          id="profile-name"
+          type="text"
+          placeholder="Display name"
+          maxlength="32"
+        />
+        <input
+          id="profile-avatar"
+          type="url"
+          placeholder="Avatar URL (https://...)"
+        />
+        <div class="profile-actions">
+          <button type="button" id="profile-cancel">Cancel</button>
+          <button type="submit">Save</button>
+        </div>
       </form>
     </div>
 

@@ -50,7 +50,12 @@ const callBanner = document.getElementById("call-banner");
 const callBannerText = document.getElementById("call-banner-text");
 const callBannerJoin = document.getElementById("call-banner-join");
 const callBannerDismiss = document.getElementById("call-banner-dismiss");
-const avatarToggle = document.getElementById("avatar-toggle");
+const profileToggle = document.getElementById("profile-toggle");
+const profileOverlay = document.getElementById("profile-overlay");
+const profileForm = document.getElementById("profile-form");
+const profileNameInput = document.getElementById("profile-name");
+const profileAvatarInput = document.getElementById("profile-avatar");
+const profileCancel = document.getElementById("profile-cancel");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
 const editBanner = document.getElementById("edit-banner");
@@ -97,6 +102,8 @@ let pendingSignals = [];
 let micAdded = false;
 let cameraAdded = false;
 let screenTrack = null;
+let callStartAt = null;
+let callConnectedAt = null;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -206,6 +213,16 @@ const formatTime = (isoString) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
+const formatDuration = (ms) => {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes === 0) {
+    return `${seconds}s`;
+  }
+  return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+};
+
 const updateTitle = () => {
   document.title = unreadCount ? `(${unreadCount}) ${baseTitle}` : baseTitle;
 };
@@ -310,6 +327,25 @@ const updateLocalIdentity = () => {
   applyAvatar(localAvatar, currentUser || "You", currentAvatarUrl);
 };
 
+const openProfileOverlay = () => {
+  if (!profileOverlay || !profileForm) {
+    return;
+  }
+  if (profileNameInput) {
+    profileNameInput.value = currentUser || "";
+  }
+  if (profileAvatarInput) {
+    profileAvatarInput.value = currentAvatarUrl || "";
+  }
+  profileOverlay.classList.add("show");
+};
+
+const closeProfileOverlay = () => {
+  if (profileOverlay) {
+    profileOverlay.classList.remove("show");
+  }
+};
+
 const updateRemoteIdentity = (payload) => {
   remoteProfile = {
     name: payload?.peerName || remoteProfile.name || "Remote",
@@ -373,6 +409,9 @@ const flushPendingSignals = () => {
 const handlePeerStream = (stream) => {
   remoteStream = stream;
   callConnected = true;
+  if (!callConnectedAt) {
+    callConnectedAt = Date.now();
+  }
   if (remoteVideo) {
     remoteVideo.srcObject = stream;
   }
@@ -450,6 +489,9 @@ const ensurePeer = (initiator) => {
 
   peer.on("connect", () => {
     callConnected = true;
+    if (!callConnectedAt) {
+      callConnectedAt = Date.now();
+    }
     updateCallStatus();
   });
 
@@ -1611,6 +1653,13 @@ const clearVideoTrack = async () => {
 };
 
 const endCall = (notifyPeer) => {
+  if (isInCall && callStartAt) {
+    const endedAt = new Date();
+    const durationMs = (callConnectedAt || callStartAt) ? endedAt - (callConnectedAt || callStartAt) : 0;
+    const durationLabel = formatDuration(durationMs);
+    const endedLabel = endedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    addSystemMessage(`Call ended • ${durationLabel} • ${endedLabel}`);
+  }
   if (notifyPeer) {
     socket.emit("call_leave");
     socket.emit("webrtc_hangup");
@@ -1657,6 +1706,8 @@ const endCall = (notifyPeer) => {
   remoteHasAudio = false;
   remoteHasVideo = false;
   callConnected = false;
+  callStartAt = null;
+  callConnectedAt = null;
   pendingIce = [];
   pendingRenegotiate = false;
   micAdded = false;
@@ -1901,22 +1952,41 @@ if (callBannerDismiss) {
   });
 }
 
-if (avatarToggle) {
-  avatarToggle.addEventListener("click", () => {
-    const next = window.prompt("Paste an avatar URL (https://...)", currentAvatarUrl || "");
-    if (next === null) {
-      return;
+if (profileToggle) {
+  profileToggle.addEventListener("click", () => {
+    openProfileOverlay();
+  });
+}
+
+if (profileCancel) {
+  profileCancel.addEventListener("click", () => {
+    closeProfileOverlay();
+  });
+}
+
+if (profileForm) {
+  profileForm.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const nextName = profileNameInput?.value?.trim() || currentUser;
+    const nextAvatar = sanitizeAvatarUrl(profileAvatarInput?.value);
+    if (nextName) {
+      currentUser = nextName.slice(0, 32);
     }
-    currentAvatarUrl = sanitizeAvatarUrl(next);
+    currentAvatarUrl = nextAvatar;
     try {
       localStorage.setItem("avatarUrl", currentAvatarUrl);
+      localStorage.setItem("profileName", currentUser);
     } catch (error) {
       // Ignore storage errors.
     }
     updateLocalIdentity();
     if (currentUser) {
-      socket.emit("avatar_update", { avatar: currentAvatarUrl });
+      socket.emit("profile_update", {
+        username: currentUser,
+        avatar: currentAvatarUrl,
+      });
     }
+    closeProfileOverlay();
   });
 }
 
@@ -2116,6 +2186,8 @@ socket.on("call_joined", async (payload) => {
     return;
   }
   isInCall = true;
+  callStartAt = Date.now();
+  callConnectedAt = null;
   callConnected = Boolean(payload?.peerId);
   pendingRenegotiate = false;
   isMicMuted = true;
@@ -2141,6 +2213,9 @@ socket.on("call_peer", async (payload) => {
   updateRemotePeer(payload?.peerId);
   updateRemoteIdentity(payload);
   callConnected = true;
+  if (!callConnectedAt) {
+    callConnectedAt = Date.now();
+  }
   updateCallStatus();
   if (!peer) {
     ensurePeer(callRole === "caller");
@@ -2158,6 +2233,9 @@ socket.on("call_connected", (payload) => {
   updateRemotePeer(payload?.peerId);
   updateRemoteIdentity(payload);
   callConnected = true;
+  if (!callConnectedAt) {
+    callConnectedAt = Date.now();
+  }
   updateCallStatus();
 });
 
@@ -2260,6 +2338,14 @@ try {
   currentAvatarUrl = sanitizeAvatarUrl(localStorage.getItem("avatarUrl"));
 } catch (error) {
   currentAvatarUrl = "";
+}
+try {
+  const storedName = localStorage.getItem("profileName");
+  if (storedName && usernameInput) {
+    usernameInput.value = storedName;
+  }
+} catch (error) {
+  // Ignore storage errors.
 }
 try {
   const storedVoice = localStorage.getItem("voiceIsolationEnabled");
