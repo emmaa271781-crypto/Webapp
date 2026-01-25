@@ -8,12 +8,14 @@ body {
   background: #0f111a;
   color: #e5e7eb;
   min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .top-bar {
@@ -24,6 +26,7 @@ body {
   padding: 1rem 1.5rem;
   background: #171a23;
   border-bottom: 1px solid #23283a;
+  flex-shrink: 0;
 }
 
 .top-bar h1 {
@@ -72,6 +75,8 @@ body {
   flex: 1;
   padding: 1rem 1.5rem;
   overflow-y: auto;
+  min-height: 0;
+  position: relative;
 }
 
 .messages {
@@ -81,6 +86,27 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+.scroll-latest {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1rem;
+  border: 1px solid #2a334a;
+  background: #1a1f2e;
+  color: #e5e7eb;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  font-size: 0.8rem;
+}
+
+.scroll-latest.show {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .message {
@@ -274,6 +300,7 @@ body {
   padding: 1rem 1.5rem;
   border-top: 1px solid #23283a;
   background: #171a23;
+  flex-shrink: 0;
 }
 
 .reply-banner {

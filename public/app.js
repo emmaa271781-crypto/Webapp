@@ -33,6 +33,7 @@ const notifyToggle = document.getElementById("notify-toggle");
 const replyBanner = document.getElementById("reply-banner");
 const replyText = document.getElementById("reply-text");
 const replyCancel = document.getElementById("reply-cancel");
+const scrollLatestButton = document.getElementById("scroll-latest");
 
 let currentUser = "";
 let peerConnection = null;
@@ -250,6 +251,34 @@ const scrollToBottom = () => {
     return;
   }
   chatPanel.scrollTop = chatPanel.scrollHeight;
+  if (scrollLatestButton) {
+    scrollLatestButton.classList.remove("show");
+  }
+};
+
+const scheduleScroll = () => {
+  requestAnimationFrame(scrollToBottom);
+};
+
+const isNearBottom = () => {
+  if (!chatPanel) {
+    return true;
+  }
+  const threshold = 120;
+  const distance =
+    chatPanel.scrollHeight - chatPanel.scrollTop - chatPanel.clientHeight;
+  return distance < threshold;
+};
+
+const handleNewMessageScroll = (shouldScroll) => {
+  if (shouldScroll) {
+    scheduleScroll();
+    if (scrollLatestButton) {
+      scrollLatestButton.classList.remove("show");
+    }
+  } else if (scrollLatestButton) {
+    scrollLatestButton.classList.add("show");
+  }
 };
 
 const getReactionUsers = (message, emoji) => {
@@ -334,14 +363,16 @@ const clearReplyTarget = () => {
 };
 
 const addSystemMessage = (text) => {
+  const shouldScroll = isNearBottom();
   const item = document.createElement("li");
   item.className = "message system";
   item.textContent = text;
   messagesList.appendChild(item);
-  scrollToBottom();
+  handleNewMessageScroll(shouldScroll);
 };
 
 const addChatMessage = (message) => {
+  const shouldScroll = isNearBottom();
   const item = document.createElement("li");
   item.className = "message";
   if (message.user === currentUser) {
@@ -390,6 +421,9 @@ const addChatMessage = (message) => {
       video.src = file.url;
       video.controls = true;
       video.playsInline = true;
+      video.addEventListener("loadedmetadata", () => {
+        handleNewMessageScroll(shouldScroll);
+      });
       text.appendChild(video);
     } else {
       const image = document.createElement("img");
@@ -397,6 +431,9 @@ const addChatMessage = (message) => {
       image.src = file.url;
       image.alt = file.name || "Image";
       image.loading = "lazy";
+      image.addEventListener("load", () => {
+        handleNewMessageScroll(shouldScroll);
+      });
       text.appendChild(image);
     }
   } else {
@@ -407,6 +444,9 @@ const addChatMessage = (message) => {
       image.src = messageText;
       image.alt = "GIF";
       image.loading = "lazy";
+      image.addEventListener("load", () => {
+        handleNewMessageScroll(shouldScroll);
+      });
       text.appendChild(image);
     } else {
       const textNode = document.createElement("span");
@@ -432,7 +472,7 @@ const addChatMessage = (message) => {
     item.appendChild(actions);
   }
   messagesList.appendChild(item);
-  scrollToBottom();
+  handleNewMessageScroll(shouldScroll);
 };
 
 const setJoinError = (message) => {
@@ -830,6 +870,24 @@ gifSearchInput.addEventListener("keydown", (event) => {
   }
 });
 
+if (chatPanel) {
+  chatPanel.addEventListener("scroll", () => {
+    if (scrollLatestButton) {
+      if (isNearBottom()) {
+        scrollLatestButton.classList.remove("show");
+      } else {
+        scrollLatestButton.classList.add("show");
+      }
+    }
+  });
+}
+
+if (scrollLatestButton) {
+  scrollLatestButton.addEventListener("click", () => {
+    scrollToBottom();
+  });
+}
+
 soundToggle.addEventListener("click", () => {
   soundEnabled = !soundEnabled;
   updateSoundButton();
@@ -989,6 +1047,8 @@ socket.on("history", (messages) => {
     return;
   }
   messages.forEach(addChatMessage);
+  scrollToBottom();
+  resetUnread();
 });
 
 socket.on("message", (message) => {
