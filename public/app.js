@@ -65,6 +65,9 @@ let isMakingOffer = false;
 let voiceIsolationEnabled = true;
 let remoteHasAudio = false;
 let remoteHasVideo = false;
+let remotePeerId = null;
+let isPolite = false;
+let ignoreOffer = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -191,6 +194,16 @@ const updateNotifyButton = () => {
   notifyToggle.textContent = notifyEnabled
     ? "🔔 Notify: On"
     : "🔔 Notify: Off";
+};
+
+const updateRemotePeer = (from) => {
+  if (!from) {
+    return;
+  }
+  remotePeerId = from;
+  if (socket.id && remotePeerId) {
+    isPolite = socket.id < remotePeerId;
+  }
 };
 
 const updateVoiceButton = () => {
@@ -1155,6 +1168,24 @@ const createPeerConnection = async () => {
       remoteHasVideo = true;
     }
     updateRemoteStatus();
+    event.track.addEventListener("mute", () => {
+      if (event.track.kind === "audio") {
+        remoteHasAudio = false;
+      }
+      if (event.track.kind === "video") {
+        remoteHasVideo = false;
+      }
+      updateRemoteStatus();
+    });
+    event.track.addEventListener("unmute", () => {
+      if (event.track.kind === "audio") {
+        remoteHasAudio = true;
+      }
+      if (event.track.kind === "video") {
+        remoteHasVideo = true;
+      }
+      updateRemoteStatus();
+    });
     event.track.addEventListener("ended", () => {
       if (remoteStream) {
         remoteStream.removeTrack(event.track);
@@ -1202,9 +1233,10 @@ const negotiate = async () => {
   }
   try {
     isMakingOffer = true;
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    socket.emit("webrtc_offer", { offer });
+    await peerConnection.setLocalDescription(
+      await peerConnection.createOffer()
+    );
+    socket.emit("webrtc_offer", { offer: peerConnection.localDescription });
   } catch (error) {
     // Ignore negotiation errors.
   } finally {
@@ -1265,6 +1297,8 @@ const endCall = (notifyPeer) => {
   audioTransceiver = null;
   videoTransceiver = null;
   isMakingOffer = false;
+  ignoreOffer = false;
+  remotePeerId = null;
   isInCall = false;
   isSharingScreen = false;
   isMicMuted = false;
@@ -1660,25 +1694,30 @@ socket.on("webrtc_offer", async (payload) => {
     return;
   }
   try {
+    updateRemotePeer(payload.from);
     await createPeerConnection();
-    if (peerConnection.signalingState !== "stable") {
-      try {
-        await peerConnection.setLocalDescription({ type: "rollback" });
-      } catch (error) {
-        // Ignore rollback issues.
-      }
+    const offerCollision =
+      payload.offer.type === "offer" &&
+      (isMakingOffer || peerConnection.signalingState !== "stable");
+    ignoreOffer = !isPolite && offerCollision;
+    if (ignoreOffer) {
+      return;
+    }
+    if (offerCollision) {
+      await peerConnection.setLocalDescription({ type: "rollback" });
     }
     await peerConnection.setRemoteDescription(payload.offer);
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    socket.emit("webrtc_answer", { answer });
+    if (payload.offer.type === "offer") {
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      socket.emit("webrtc_answer", { answer: peerConnection.localDescription });
+    }
     isInCall = true;
     isMicMuted = true;
     isCameraEnabled = false;
     showCallPanel();
     updateLocalVideoPreview();
     updateCallButtons();
-    await negotiate();
   } catch (error) {
     addSystemMessage("Incoming call failed.");
     endCall(true);
@@ -1690,6 +1729,7 @@ socket.on("webrtc_answer", async (payload) => {
     return;
   }
   try {
+    updateRemotePeer(payload.from);
     await peerConnection.setRemoteDescription(payload.answer);
   } catch (error) {
     addSystemMessage("Call setup failed.");
@@ -1701,6 +1741,10 @@ socket.on("webrtc_ice", async (payload) => {
     return;
   }
   try {
+    if (ignoreOffer) {
+      return;
+    }
+    updateRemotePeer(payload.from);
     await peerConnection.addIceCandidate(payload.candidate);
   } catch (error) {
     addSystemMessage("Call connection issue.");

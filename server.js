@@ -473,7 +473,10 @@ io.on("connection", (socket) => {
     if (!payload?.offer) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_offer", { offer: payload.offer });
+    socket.to(ROOM_NAME).emit("webrtc_offer", {
+      offer: payload.offer,
+      from: socket.id,
+    });
   });
 
   socket.on("webrtc_answer", (payload) => {
@@ -483,7 +486,10 @@ io.on("connection", (socket) => {
     if (!payload?.answer) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_answer", { answer: payload.answer });
+    socket.to(ROOM_NAME).emit("webrtc_answer", {
+      answer: payload.answer,
+      from: socket.id,
+    });
   });
 
   socket.on("webrtc_ice", (payload) => {
@@ -493,14 +499,17 @@ io.on("connection", (socket) => {
     if (!payload?.candidate) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_ice", { candidate: payload.candidate });
+    socket.to(ROOM_NAME).emit("webrtc_ice", {
+      candidate: payload.candidate,
+      from: socket.id,
+    });
   });
 
   socket.on("webrtc_hangup", () => {
     if (!socket.data.authed) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_hangup");
+    socket.to(ROOM_NAME).emit("webrtc_hangup", { from: socket.id });
   });
 
   socket.on("disconnect", () => {
