@@ -41,6 +41,10 @@ const remoteStatus = document.getElementById("remote-status");
 const callStatus = document.getElementById("call-status");
 const localTile = document.getElementById("local-tile");
 const remoteTile = document.getElementById("remote-tile");
+const callBanner = document.getElementById("call-banner");
+const callBannerText = document.getElementById("call-banner-text");
+const callBannerJoin = document.getElementById("call-banner-join");
+const callBannerDismiss = document.getElementById("call-banner-dismiss");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
 const editBanner = document.getElementById("edit-banner");
@@ -71,6 +75,7 @@ let remotePeerId = null;
 let localVad = null;
 let remoteVad = null;
 let callRole = null;
+let bannerDismissed = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -938,6 +943,23 @@ const updateCallStatus = () => {
   }
 };
 
+const showCallBanner = (text) => {
+  if (!callBanner || bannerDismissed || isInCall) {
+    return;
+  }
+  if (callBannerText) {
+    callBannerText.textContent = text || "A call is active. Join now.";
+  }
+  callBanner.classList.add("show");
+};
+
+const hideCallBanner = () => {
+  if (!callBanner) {
+    return;
+  }
+  callBanner.classList.remove("show");
+};
+
 const updateLocalVideoPreview = () => {
   if (isSharingScreen && screenStream) {
     localVideo.srcObject = screenStream;
@@ -1616,6 +1638,19 @@ callStartButton.addEventListener("click", () => {
   startCall();
 });
 
+if (callBannerJoin) {
+  callBannerJoin.addEventListener("click", () => {
+    startCall();
+  });
+}
+
+if (callBannerDismiss) {
+  callBannerDismiss.addEventListener("click", () => {
+    bannerDismissed = true;
+    hideCallBanner();
+  });
+}
+
 callShareButton.addEventListener("click", () => {
   toggleScreenShare();
 });
@@ -1879,6 +1914,7 @@ socket.on("call_joined", async (payload) => {
     endCall(false);
     return;
   }
+  hideCallBanner();
   showCallPanel();
   updateLocalVideoPreview();
   updateCallButtons();
@@ -1898,11 +1934,19 @@ socket.on("call_peer", async (payload) => {
 
 socket.on("call_started", (payload) => {
   const name = payload?.user || "Someone";
-  addSystemMessage(`${name} started a call. Click Join Call to connect.`);
+  bannerDismissed = false;
+  showCallBanner(`${name} started a call. Click Join Call to connect.`);
 });
 
 socket.on("call_connected", () => {
   updateCallStatus();
+});
+
+socket.on("call_status", (payload) => {
+  if (payload?.active) {
+    const name = payload?.user || "Someone";
+    showCallBanner(`${name} started a call. Click Join Call to connect.`);
+  }
 });
 
 socket.on("call_busy", () => {
@@ -1911,6 +1955,12 @@ socket.on("call_busy", () => {
 
 socket.on("call_peer_left", () => {
   endCall(false);
+});
+
+socket.on("call_ended", () => {
+  if (!isInCall) {
+    hideCallBanner();
+  }
 });
 
 socket.on("call_negotiate", async () => {

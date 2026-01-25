@@ -287,6 +287,7 @@ const clearCallState = () => {
   callState.callerId = null;
   callState.calleeId = null;
   callPeers.clear();
+  io.to(ROOM_NAME).emit("call_ended");
 };
 
 const removeFromCall = (socketId) => {
@@ -351,6 +352,10 @@ io.on("connection", (socket) => {
 
     socket.emit("auth_ok", { username });
     socket.emit("history", messageHistory);
+    if (callState.callerId) {
+      const callerName = connectedUsers.get(callState.callerId) || "Someone";
+      socket.emit("call_status", { active: true, user: callerName });
+    }
     emitPresence();
     emitTyping();
 

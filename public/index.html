@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Classroom CS</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
   </head>
   <body>
     <div class="app">
@@ -49,14 +55,20 @@
         </aside>
 
         <div class="main">
-          <main id="chat-panel" class="chat">
-            <ul id="messages" class="messages"></ul>
-            <button id="scroll-latest" class="scroll-latest" type="button">
-              New messages ↓
-            </button>
-          </main>
-
-          <div id="typing-indicator" class="typing-indicator"></div>
+          <div id="call-banner" class="call-banner">
+            <div>
+              <div class="call-banner-title">Call in progress</div>
+              <div id="call-banner-text" class="call-banner-text"></div>
+            </div>
+            <div class="call-banner-actions">
+              <button id="call-banner-join" class="call-banner-button" type="button">
+                Join Call
+              </button>
+              <button id="call-banner-dismiss" class="call-banner-dismiss" type="button">
+                Dismiss
+              </button>
+            </div>
+          </div>
 
           <div id="call-panel" class="call-panel">
             <div class="call-header">
@@ -99,6 +111,15 @@
               </div>
             </div>
           </div>
+
+          <main id="chat-panel" class="chat">
+            <ul id="messages" class="messages"></ul>
+            <button id="scroll-latest" class="scroll-latest" type="button">
+              New messages ↓
+            </button>
+          </main>
+
+          <div id="typing-indicator" class="typing-indicator"></div>
 
           <form id="message-form" class="composer" autocomplete="off">
             <div id="edit-banner" class="edit-banner">
