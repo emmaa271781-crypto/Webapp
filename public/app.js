@@ -34,6 +34,7 @@ const callEndButton = document.getElementById("call-end");
 const callPanel = document.getElementById("call-panel");
 const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
+const remoteAudio = document.getElementById("remote-audio");
 const localPlaceholder = document.getElementById("local-placeholder");
 const remotePlaceholder = document.getElementById("remote-placeholder");
 const localStatus = document.getElementById("local-status");
@@ -76,6 +77,7 @@ let localVad = null;
 let remoteVad = null;
 let callRole = null;
 let bannerDismissed = false;
+let callConnected = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -936,7 +938,7 @@ const updateCallStatus = () => {
     callStatus.textContent = "Waiting for peer";
     return;
   }
-  if (remoteHasAudio || remoteHasVideo) {
+  if (callConnected || remoteHasAudio || remoteHasVideo) {
     callStatus.textContent = "Connected";
   } else {
     callStatus.textContent = "Connecting";
@@ -1243,6 +1245,9 @@ const createPeerConnection = async () => {
     if (!remoteStream) {
       remoteStream = new MediaStream();
       remoteVideo.srcObject = remoteStream;
+      if (remoteAudio) {
+        remoteAudio.srcObject = remoteStream;
+      }
     }
     remoteStream.addTrack(event.track);
     if (event.track.kind === "audio") {
@@ -1255,6 +1260,13 @@ const createPeerConnection = async () => {
         remoteTile,
         () => remoteHasAudio
       );
+      if (remoteAudio) {
+        remoteAudio
+          .play()
+          .catch(() => {
+            // Autoplay might be blocked until user interacts.
+          });
+      }
     }
     if (event.track.kind === "video") {
       remoteHasVideo = true;
@@ -1299,12 +1311,17 @@ const createPeerConnection = async () => {
     if (!state) {
       return;
     }
+    if (state === "connected" || state === "completed") {
+      callConnected = true;
+      updateCallStatus();
+      return;
+    }
     if (state === "closed") {
       endCall(false);
       return;
     }
     if (["failed", "disconnected"].includes(state)) {
-      if (!remotePeerId) {
+      if (!callConnected) {
         return;
       }
       endCall(false);
@@ -1432,6 +1449,7 @@ const endCall = (notifyPeer) => {
   isCameraEnabled = false;
   remoteHasAudio = false;
   remoteHasVideo = false;
+  callConnected = false;
   if (localVad) {
     stopVad(localVad);
     localVad = null;
@@ -1905,6 +1923,7 @@ socket.on("call_joined", async (payload) => {
     return;
   }
   isInCall = true;
+  callConnected = false;
   isMicMuted = true;
   isCameraEnabled = false;
   try {
@@ -1926,6 +1945,7 @@ socket.on("call_joined", async (payload) => {
 
 socket.on("call_peer", async (payload) => {
   updateRemotePeer(payload?.peerId);
+  callConnected = false;
   updateCallStatus();
   if (callRole === "caller") {
     await negotiate();
