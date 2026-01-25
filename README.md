@@ -35,8 +35,7 @@ The default password is `0327`. You can override it by setting
 
 ### GIF search
 
-GIF search uses GIPHY when `GIPHY_API_KEY` is set and falls back to Tenor
-(`TENOR_API_KEY`) if needed. You must provide at least one API key.
+GIF search uses GIPHY. Set `GIPHY_API_KEY` in Railway to enable results.
 
 ### Push notifications
 

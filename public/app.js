@@ -53,7 +53,9 @@ let isSharingScreen = false;
 let isMicMuted = false;
 let isCameraEnabled = false;
 let cameraTrack = null;
-let videoSender = null;
+let audioTransceiver = null;
+let videoTransceiver = null;
+let isMakingOffer = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -1054,44 +1056,69 @@ const createPeerConnection = async () => {
     }
   };
 
-  const stream = await ensureLocalStream();
-  stream.getTracks().forEach((track) => {
-    peerConnection.addTrack(track, stream);
+  peerConnection.onnegotiationneeded = () => {
+    if (isInCall) {
+      negotiate();
+    }
+  };
+
+  audioTransceiver = peerConnection.addTransceiver("audio", {
+    direction: "recvonly",
+  });
+  videoTransceiver = peerConnection.addTransceiver("video", {
+    direction: "recvonly",
   });
 
   return peerConnection;
 };
 
-const getVideoSender = () => {
-  if (videoSender) {
-    return videoSender;
-  }
-  const sender = peerConnection
-    ?.getSenders()
-    .find((item) => item.track && item.track.kind === "video");
-  if (sender) {
-    videoSender = sender;
-  }
-  return sender || null;
-};
-
-const attachVideoTrack = async (track) => {
+const negotiate = async () => {
   if (!peerConnection) {
     return;
   }
-  const sender = getVideoSender();
-  if (sender) {
-    await sender.replaceTrack(track);
-  } else if (localStream) {
-    videoSender = peerConnection.addTrack(track, localStream);
+  if (peerConnection.signalingState !== "stable") {
+    return;
+  }
+  if (isMakingOffer) {
+    return;
+  }
+  try {
+    isMakingOffer = true;
+    const offer = await peerConnection.createOffer();
+    await peerConnection.setLocalDescription(offer);
+    socket.emit("webrtc_offer", { offer });
+  } catch (error) {
+    // Ignore negotiation errors.
+  } finally {
+    isMakingOffer = false;
   }
 };
 
-const clearVideoTrack = async () => {
-  const sender = getVideoSender();
-  if (sender) {
-    await sender.replaceTrack(null);
+const attachAudioTrack = async (track) => {
+  if (!audioTransceiver) {
+    return;
   }
+  await audioTransceiver.sender.replaceTrack(track);
+  audioTransceiver.direction = "sendrecv";
+  await negotiate();
+};
+
+const attachVideoTrack = async (track) => {
+  if (!videoTransceiver) {
+    return;
+  }
+  await videoTransceiver.sender.replaceTrack(track);
+  videoTransceiver.direction = "sendrecv";
+  await negotiate();
+};
+
+const clearVideoTrack = async () => {
+  if (!videoTransceiver) {
+    return;
+  }
+  await videoTransceiver.sender.replaceTrack(null);
+  videoTransceiver.direction = "recvonly";
+  await negotiate();
 };
 
 const endCall = (notifyPeer) => {
@@ -1117,7 +1144,9 @@ const endCall = (notifyPeer) => {
   remoteStream = null;
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
-  videoSender = null;
+  audioTransceiver = null;
+  videoTransceiver = null;
+  isMakingOffer = false;
   isInCall = false;
   isSharingScreen = false;
   isMicMuted = false;
@@ -1142,6 +1171,8 @@ const startCall = async () => {
     await peerConnection.setLocalDescription(offer);
     socket.emit("webrtc_offer", { offer });
     isInCall = true;
+    isMicMuted = true;
+    isCameraEnabled = false;
     showCallPanel();
     updateLocalVideoPreview();
     updateCallButtons();
@@ -1341,7 +1372,28 @@ micToggle.addEventListener("click", () => {
   if (!isInCall) {
     return;
   }
-  isMicMuted = !isMicMuted;
+  if (isMicMuted) {
+    (async () => {
+      try {
+        await createPeerConnection();
+        const stream = await ensureLocalStream();
+        const track = stream.getAudioTracks()[0];
+        if (!track) {
+          throw new Error("No audio track.");
+        }
+        isMicMuted = false;
+        track.enabled = true;
+        await attachAudioTrack(track);
+        updateCallButtons();
+      } catch (error) {
+        addSystemMessage("Microphone access denied.");
+        isMicMuted = true;
+        updateCallButtons();
+      }
+    })();
+    return;
+  }
+  isMicMuted = true;
   applyMicState();
   updateCallButtons();
 });
@@ -1470,18 +1522,28 @@ socket.on("message_error", (message) => {
 });
 
 socket.on("webrtc_offer", async (payload) => {
-  if (peerConnection || !currentUser || !payload?.offer) {
+  if (!currentUser || !payload?.offer) {
     return;
   }
   try {
-    isInCall = true;
-    showCallPanel();
-    updateCallButtons();
     await createPeerConnection();
+    if (peerConnection.signalingState !== "stable") {
+      try {
+        await peerConnection.setLocalDescription({ type: "rollback" });
+      } catch (error) {
+        // Ignore rollback issues.
+      }
+    }
     await peerConnection.setRemoteDescription(payload.offer);
     const answer = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answer);
     socket.emit("webrtc_answer", { answer });
+    isInCall = true;
+    isMicMuted = true;
+    isCameraEnabled = false;
+    showCallPanel();
+    updateLocalVideoPreview();
+    updateCallButtons();
   } catch (error) {
     addSystemMessage("Incoming call failed.");
     endCall(true);

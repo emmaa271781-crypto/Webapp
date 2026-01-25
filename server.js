@@ -13,7 +13,6 @@ const PORT = process.env.PORT || 3000;
 const MAX_HISTORY = 100;
 const REQUIRED_PASSWORD = process.env.CHAT_PASSWORD || "0327";
 const GIPHY_API_KEY = process.env.GIPHY_API_KEY || "";
-const TENOR_API_KEY = process.env.TENOR_API_KEY || "";
 const GIF_LIMIT = 12;
 const MAX_FILE_CHARS = 4_500_000;
 const ROOM_NAME = "main";
@@ -39,7 +38,7 @@ app.get("/healthz", (req, res) => {
 
 const fetchGiphy = async (query) => {
   if (!GIPHY_API_KEY) {
-    return { results: [], error: null, used: false };
+    return { results: [], error: "Giphy API key missing.", used: false };
   }
   const url = new URL("https://api.giphy.com/v1/gifs/search");
   url.searchParams.set("api_key", GIPHY_API_KEY);
@@ -72,48 +71,15 @@ const fetchGiphy = async (query) => {
   return { results, error: null, used: true };
 };
 
-const fetchTenor = async (query) => {
-  if (!TENOR_API_KEY) {
-    return { results: [], error: null, used: false };
-  }
-  const url = new URL("https://tenor.googleapis.com/v2/search");
-  url.searchParams.set("key", TENOR_API_KEY);
-  url.searchParams.set("q", query);
-  url.searchParams.set("limit", String(GIF_LIMIT));
-  url.searchParams.set("media_filter", "gif,tinygif");
-  url.searchParams.set("contentfilter", "medium");
-  const response = await fetch(url);
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return {
-      results: [],
-      error: data?.error?.message || "Tenor search failed.",
-      used: true,
-    };
-  }
-  const results = (data.results || [])
-    .map((gif) => {
-      const media = gif.media_formats || {};
-      const urlValue = media.gif?.url || media.tinygif?.url;
-      const preview = media.tinygif?.url || urlValue;
-      if (!urlValue) {
-        return null;
-      }
-      return { id: gif.id, url: urlValue, preview };
-    })
-    .filter(Boolean);
-  return { results, error: null, used: true };
-};
-
 app.get("/api/gifs", async (req, res) => {
   const query = String(req.query.q || "").trim().slice(0, 80);
   if (!query) {
     res.json({ results: [] });
     return;
   }
-  if (!GIPHY_API_KEY && !TENOR_API_KEY) {
+  if (!GIPHY_API_KEY) {
     res.status(400).json({
-      error: "GIF search not configured. Set TENOR_API_KEY in Railway.",
+      error: "GIF search not configured. Set GIPHY_API_KEY in Railway.",
     });
     return;
   }
@@ -123,14 +89,8 @@ app.get("/api/gifs", async (req, res) => {
       res.json({ results: giphy.results, provider: "giphy" });
       return;
     }
-    const tenor = await fetchTenor(query);
-    if (tenor.results.length) {
-      res.json({ results: tenor.results, provider: "tenor" });
-      return;
-    }
-    const errorMessage = giphy.error || tenor.error;
-    if (errorMessage) {
-      res.status(502).json({ error: errorMessage });
+    if (giphy.error) {
+      res.status(502).json({ error: giphy.error });
       return;
     }
     res.json({ results: [] });
