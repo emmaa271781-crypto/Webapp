@@ -375,6 +375,9 @@ io.on("connection", (socket) => {
     if (!callState.callerId) {
       callState.callerId = socket.id;
       socket.emit("call_joined", { role: "caller" });
+      socket.to(ROOM_NAME).emit("call_started", {
+        user: socket.data.username,
+      });
       return;
     }
     if (!callState.calleeId) {
@@ -383,6 +386,8 @@ io.on("connection", (socket) => {
       callPeers.set(socket.id, callState.callerId);
       socket.emit("call_joined", { role: "callee", peerId: callState.callerId });
       io.to(callState.callerId).emit("call_peer", { peerId: socket.id });
+      io.to(callState.callerId).emit("call_connected", { peerId: socket.id });
+      socket.emit("call_connected", { peerId: callState.callerId });
       return;
     }
     socket.emit("call_busy");

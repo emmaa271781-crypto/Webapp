@@ -1274,7 +1274,17 @@ const createPeerConnection = async () => {
 
   peerConnection.onconnectionstatechange = () => {
     const state = peerConnection?.connectionState;
-    if (state && ["failed", "disconnected", "closed"].includes(state)) {
+    if (!state) {
+      return;
+    }
+    if (state === "closed") {
+      endCall(false);
+      return;
+    }
+    if (["failed", "disconnected"].includes(state)) {
+      if (!remotePeerId) {
+        return;
+      }
       endCall(false);
     }
   };
@@ -1884,6 +1894,15 @@ socket.on("call_peer", async (payload) => {
   if (callRole === "caller") {
     await negotiate();
   }
+});
+
+socket.on("call_started", (payload) => {
+  const name = payload?.user || "Someone";
+  addSystemMessage(`${name} started a call. Click Join Call to connect.`);
+});
+
+socket.on("call_connected", () => {
+  updateCallStatus();
 });
 
 socket.on("call_busy", () => {
