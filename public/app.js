@@ -86,6 +86,7 @@ let callConnected = false;
 let currentAvatarUrl = "";
 let remoteProfile = { name: "Remote", avatar: "" };
 let pendingIce = [];
+let pendingRenegotiate = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -225,6 +226,10 @@ const updateRemotePeer = (from) => {
       socket.emit("webrtc_ice", { candidate, to: remotePeerId });
     });
     pendingIce = [];
+  }
+  if (pendingRenegotiate) {
+    pendingRenegotiate = false;
+    requestRenegotiate();
   }
 };
 
@@ -1441,6 +1446,7 @@ const requestRenegotiate = async () => {
     return;
   }
   if (!remotePeerId) {
+    pendingRenegotiate = true;
     return;
   }
   if (callRole === "caller") {
@@ -1543,6 +1549,7 @@ const endCall = (notifyPeer) => {
   remoteHasVideo = false;
   callConnected = false;
   pendingIce = [];
+  pendingRenegotiate = false;
   if (localVad) {
     stopVad(localVad);
     localVad = null;
@@ -2045,6 +2052,7 @@ socket.on("call_joined", async (payload) => {
   }
   isInCall = true;
   callConnected = Boolean(payload?.peerId);
+  pendingRenegotiate = false;
   isMicMuted = true;
   isCameraEnabled = false;
   try {
@@ -2071,6 +2079,9 @@ socket.on("call_peer", async (payload) => {
   updateCallStatus();
   if (callRole === "caller") {
     await negotiate();
+  } else if (pendingRenegotiate) {
+    pendingRenegotiate = false;
+    await requestRenegotiate();
   }
 });
 
