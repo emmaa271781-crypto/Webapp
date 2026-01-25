@@ -2044,7 +2044,7 @@ socket.on("call_joined", async (payload) => {
     return;
   }
   isInCall = true;
-  callConnected = false;
+  callConnected = Boolean(payload?.peerId);
   isMicMuted = true;
   isCameraEnabled = false;
   try {
@@ -2067,7 +2067,7 @@ socket.on("call_joined", async (payload) => {
 socket.on("call_peer", async (payload) => {
   updateRemotePeer(payload?.peerId);
   updateRemoteIdentity(payload);
-  callConnected = false;
+  callConnected = true;
   updateCallStatus();
   if (callRole === "caller") {
     await negotiate();

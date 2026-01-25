@@ -433,6 +433,11 @@ io.on("connection", (socket) => {
         peerName: calleeInfo.name,
         peerAvatar: calleeInfo.avatar,
       });
+      socket.emit("call_peer", {
+        peerId: callState.callerId,
+        peerName: callerInfo.name,
+        peerAvatar: callerInfo.avatar,
+      });
       io.to(callState.callerId).emit("call_connected", {
         peerId: socket.id,
         peerName: calleeInfo.name,
