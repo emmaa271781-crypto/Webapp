@@ -622,6 +622,23 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("webrtc_signal", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    if (!payload?.signal) {
+      return;
+    }
+    const target = payload.to || getPeerId();
+    if (!target) {
+      return;
+    }
+    io.to(target).emit("webrtc_signal", {
+      signal: payload.signal,
+      from: socket.id,
+    });
+  });
+
   socket.on("webrtc_answer", (payload) => {
     if (!socket.data.authed) {
       return;

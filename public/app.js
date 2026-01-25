@@ -87,6 +87,16 @@ let currentAvatarUrl = "";
 let remoteProfile = { name: "Remote", avatar: "" };
 let pendingIce = [];
 let pendingRenegotiate = false;
+let silentAudioTrack = null;
+let silentAudioContext = null;
+let silentOscillator = null;
+let micTrack = null;
+let peer = null;
+let peerInitiator = false;
+let pendingSignals = [];
+let micAdded = false;
+let cameraAdded = false;
+let screenTrack = null;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -221,6 +231,7 @@ const updateRemotePeer = (from) => {
   }
   remotePeerId = from;
   updateCallStatus();
+  flushPendingSignals();
   if (pendingIce.length) {
     pendingIce.forEach((candidate) => {
       socket.emit("webrtc_ice", { candidate, to: remotePeerId });
@@ -347,6 +358,123 @@ const applyVoiceConstraints = async () => {
   } catch (error) {
     // Ignore constraint failures.
   }
+};
+
+const flushPendingSignals = () => {
+  if (!remotePeerId || !pendingSignals.length) {
+    return;
+  }
+  pendingSignals.forEach((signal) => {
+    socket.emit("webrtc_signal", { signal, to: remotePeerId });
+  });
+  pendingSignals = [];
+};
+
+const handlePeerStream = (stream) => {
+  remoteStream = stream;
+  callConnected = true;
+  if (remoteVideo) {
+    remoteVideo.srcObject = stream;
+  }
+  if (remoteAudio) {
+    remoteAudio.srcObject = stream;
+    ensureRemoteAudioPlayback();
+  }
+  const audioTracks = stream.getAudioTracks();
+  const videoTracks = stream.getVideoTracks();
+  remoteHasAudio = audioTracks.length > 0;
+  remoteHasVideo = videoTracks.length > 0;
+  updateRemoteStatus();
+  if (remoteHasAudio) {
+    if (remoteVad) {
+      stopVad(remoteVad);
+    }
+    remoteVad = startVad(stream, remoteTile, () => remoteHasAudio);
+  }
+  audioTracks.forEach((track) => {
+    track.addEventListener("ended", () => {
+      remoteHasAudio = false;
+      updateRemoteStatus();
+    });
+    track.addEventListener("mute", () => {
+      remoteHasAudio = false;
+      updateRemoteStatus();
+    });
+    track.addEventListener("unmute", () => {
+      remoteHasAudio = true;
+      ensureRemoteAudioPlayback();
+      updateRemoteStatus();
+    });
+  });
+  videoTracks.forEach((track) => {
+    track.addEventListener("ended", () => {
+      remoteHasVideo = false;
+      updateRemoteStatus();
+    });
+    track.addEventListener("mute", () => {
+      remoteHasVideo = false;
+      updateRemoteStatus();
+    });
+    track.addEventListener("unmute", () => {
+      remoteHasVideo = true;
+      updateRemoteStatus();
+    });
+  });
+  updateCallStatus();
+};
+
+const ensurePeer = (initiator) => {
+  if (peer) {
+    return peer;
+  }
+  if (!localStream) {
+    localStream = new MediaStream();
+  }
+  peerInitiator = Boolean(initiator);
+  peer = new window.SimplePeer({
+    initiator: peerInitiator,
+    trickle: true,
+    stream: localStream.getTracks().length ? localStream : undefined,
+    config: {
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    },
+  });
+
+  peer.on("signal", (signal) => {
+    if (remotePeerId) {
+      socket.emit("webrtc_signal", { signal, to: remotePeerId });
+    } else {
+      pendingSignals.push(signal);
+    }
+  });
+
+  peer.on("connect", () => {
+    callConnected = true;
+    updateCallStatus();
+  });
+
+  peer.on("stream", (stream) => {
+    handlePeerStream(stream);
+  });
+
+  peer.on("close", () => {
+    endCall(false);
+  });
+
+  peer.on("error", () => {
+    // Ignore peer errors to prevent hard crash.
+  });
+
+  return peer;
+};
+
+const destroyPeer = () => {
+  if (peer) {
+    peer.destroy();
+    peer = null;
+  }
+  peerInitiator = false;
+  pendingSignals = [];
 };
 
 const stopVad = (vad) => {
@@ -1301,7 +1429,7 @@ const handleFileUpload = (file) => {
 };
 
 const ensureLocalStream = async () => {
-  if (localStream && localStream.getAudioTracks().length) {
+  if (localStream && micTrack) {
     return localStream;
   }
   const audioStream = await navigator.mediaDevices.getUserMedia({
@@ -1311,9 +1439,11 @@ const ensureLocalStream = async () => {
   if (!localStream) {
     localStream = new MediaStream();
   }
-  audioStream.getAudioTracks().forEach((track) => {
+  const [track] = audioStream.getAudioTracks();
+  if (track) {
+    micTrack = track;
     localStream.addTrack(track);
-  });
+  }
   applyMicState();
   updateLocalVideoPreview();
   return localStream;
@@ -1442,74 +1572,42 @@ const createPeerConnection = async () => {
 };
 
 const requestRenegotiate = async () => {
-  if (!peerConnection) {
+  if (!peer) {
     return;
   }
-  if (!remotePeerId) {
-    pendingRenegotiate = true;
-    return;
-  }
-  if (callRole === "caller") {
-    await negotiate();
-    return;
-  }
-  socket.emit("call_negotiate", { to: remotePeerId });
-};
-
-const negotiate = async () => {
-  if (!peerConnection) {
-    return;
-  }
-  if (peerConnection.signalingState !== "stable") {
-    return;
-  }
-  if (isMakingOffer) {
-    return;
-  }
-  if (callRole !== "caller" || !remotePeerId) {
-    return;
-  }
-  try {
-    isMakingOffer = true;
-    await peerConnection.setLocalDescription(
-      await peerConnection.createOffer()
-    );
-    socket.emit("webrtc_offer", {
-      offer: peerConnection.localDescription,
-      to: remotePeerId,
-    });
-  } catch (error) {
-    // Ignore negotiation errors.
-  } finally {
-    isMakingOffer = false;
-  }
+  // SimplePeer handles renegotiation automatically when tracks change.
 };
 
 const attachAudioTrack = async (track) => {
-  if (!audioTransceiver) {
+  if (!peer || !localStream || !track) {
     return;
   }
-  await audioTransceiver.sender.replaceTrack(track);
-  audioTransceiver.direction = "sendrecv";
-  await requestRenegotiate();
+  if (!micAdded) {
+    peer.addTrack(track, localStream);
+    micAdded = true;
+  }
 };
 
 const attachVideoTrack = async (track) => {
-  if (!videoTransceiver) {
+  if (!peer || !localStream || !track) {
     return;
   }
-  await videoTransceiver.sender.replaceTrack(track);
-  videoTransceiver.direction = "sendrecv";
-  await requestRenegotiate();
+  if (!cameraAdded) {
+    peer.addTrack(track, localStream);
+    cameraAdded = true;
+  } else if (cameraTrack && peer.replaceTrack) {
+    peer.replaceTrack(cameraTrack, track, localStream);
+  }
 };
 
 const clearVideoTrack = async () => {
-  if (!videoTransceiver) {
+  if (!peer || !localStream || !cameraTrack) {
     return;
   }
-  await videoTransceiver.sender.replaceTrack(null);
-  videoTransceiver.direction = "recvonly";
-  await requestRenegotiate();
+  if (peer.removeTrack) {
+    peer.removeTrack(cameraTrack, localStream);
+  }
+  cameraAdded = false;
 };
 
 const endCall = (notifyPeer) => {
@@ -1525,9 +1623,17 @@ const endCall = (notifyPeer) => {
     screenStream.getTracks().forEach((track) => track.stop());
     screenStream = null;
   }
+  if (screenTrack) {
+    screenTrack.stop();
+    screenTrack = null;
+  }
   if (cameraTrack) {
     cameraTrack.stop();
     cameraTrack = null;
+  }
+  if (micTrack) {
+    micTrack.stop();
+    micTrack = null;
   }
   if (localStream) {
     localStream.getTracks().forEach((track) => track.stop());
@@ -1536,6 +1642,9 @@ const endCall = (notifyPeer) => {
   remoteStream = null;
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
+  if (remoteAudio) {
+    remoteAudio.srcObject = null;
+  }
   audioTransceiver = null;
   videoTransceiver = null;
   isMakingOffer = false;
@@ -1550,6 +1659,9 @@ const endCall = (notifyPeer) => {
   callConnected = false;
   pendingIce = [];
   pendingRenegotiate = false;
+  micAdded = false;
+  cameraAdded = false;
+  destroyPeer();
   if (localVad) {
     stopVad(localVad);
     localVad = null;
@@ -1580,18 +1692,26 @@ const stopScreenShare = () => {
     screenStream.getTracks().forEach((track) => track.stop());
     screenStream = null;
   }
-  isSharingScreen = false;
-  if (isCameraEnabled && cameraTrack) {
-    attachVideoTrack(cameraTrack);
-  } else {
-    clearVideoTrack();
+  if (screenTrack) {
+    if (peer && peer.replaceTrack && cameraTrack && isCameraEnabled) {
+      peer.replaceTrack(screenTrack, cameraTrack, localStream);
+    } else if (peer && peer.removeTrack && localStream) {
+      peer.removeTrack(screenTrack, localStream);
+      cameraAdded = false;
+    }
+    screenTrack.stop();
+    screenTrack = null;
   }
+  isSharingScreen = false;
   updateLocalVideoPreview();
   updateCallButtons();
 };
 
 const toggleScreenShare = async () => {
-  if (!peerConnection) {
+  if (!peer) {
+    ensurePeer(callRole === "caller");
+  }
+  if (!peer) {
     return;
   }
   if (isSharingScreen) {
@@ -1600,11 +1720,16 @@ const toggleScreenShare = async () => {
   }
   try {
     screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-    const screenTrack = screenStream.getVideoTracks()[0];
+    screenTrack = screenStream.getVideoTracks()[0];
     if (!localStream) {
       localStream = new MediaStream();
     }
-    await attachVideoTrack(screenTrack);
+    if (cameraTrack && isCameraEnabled && peer.replaceTrack) {
+      await peer.replaceTrack(cameraTrack, screenTrack, localStream);
+    } else {
+      await attachVideoTrack(screenTrack);
+      cameraAdded = true;
+    }
     screenTrack.onended = () => {
       stopScreenShare();
     };
@@ -1820,7 +1945,7 @@ micToggle.addEventListener("click", () => {
   if (isMicMuted) {
     (async () => {
       try {
-        await createPeerConnection();
+        ensurePeer(callRole === "caller");
         const stream = await ensureLocalStream();
         const track = stream.getAudioTracks()[0];
         if (!track) {
@@ -1860,14 +1985,14 @@ camToggle.addEventListener("click", async () => {
     if (cameraTrack && localStream) {
       localStream.removeTrack(cameraTrack);
     }
+    if (!isSharingScreen) {
+      await clearVideoTrack();
+    }
     if (cameraTrack) {
       cameraTrack.stop();
       cameraTrack = null;
     }
     isCameraEnabled = false;
-    if (!isSharingScreen) {
-      await clearVideoTrack();
-    }
     updateLocalVideoPreview();
     updateCallButtons();
     return;
@@ -1882,7 +2007,8 @@ camToggle.addEventListener("click", async () => {
     }
     localStream.addTrack(cameraTrack);
     isCameraEnabled = true;
-    if (peerConnection && !isSharingScreen) {
+    ensurePeer(callRole === "caller");
+    if (!isSharingScreen) {
       await attachVideoTrack(cameraTrack);
     }
     cameraTrack.onended = () => {
@@ -1978,67 +2104,6 @@ socket.on("message_error", (message) => {
   }
 });
 
-socket.on("webrtc_offer", async (payload) => {
-  if (!currentUser || !payload?.offer) {
-    return;
-  }
-  try {
-    updateRemotePeer(payload.from);
-    if (callRole === "caller") {
-      return;
-    }
-    await createPeerConnection();
-    await peerConnection.setRemoteDescription(payload.offer);
-    if (payload.offer.type === "offer") {
-      const answer = await peerConnection.createAnswer();
-      await peerConnection.setLocalDescription(answer);
-      socket.emit("webrtc_answer", {
-        answer: peerConnection.localDescription,
-        to: payload.from,
-      });
-    }
-    if (!isInCall) {
-      isInCall = true;
-      isMicMuted = true;
-      isCameraEnabled = false;
-      callRole = "callee";
-    }
-    showCallPanel();
-    updateLocalVideoPreview();
-    updateCallButtons();
-  } catch (error) {
-    addSystemMessage("Incoming call failed.");
-    endCall(true);
-  }
-});
-
-socket.on("webrtc_answer", async (payload) => {
-  if (!peerConnection || !payload?.answer) {
-    return;
-  }
-  try {
-    if (callRole !== "caller") {
-      return;
-    }
-    updateRemotePeer(payload.from);
-    await peerConnection.setRemoteDescription(payload.answer);
-  } catch (error) {
-    addSystemMessage("Call setup failed.");
-  }
-});
-
-socket.on("webrtc_ice", async (payload) => {
-  if (!peerConnection || !payload?.candidate) {
-    return;
-  }
-  try {
-    updateRemotePeer(payload.from);
-    await peerConnection.addIceCandidate(payload.candidate);
-  } catch (error) {
-    addSystemMessage("Call connection issue.");
-  }
-});
-
 socket.on("webrtc_hangup", () => {
   endCall(false);
 });
@@ -2056,7 +2121,7 @@ socket.on("call_joined", async (payload) => {
   isMicMuted = true;
   isCameraEnabled = false;
   try {
-    await createPeerConnection();
+    ensurePeer(callRole === "caller");
   } catch (error) {
     addSystemMessage("Call setup failed.");
     endCall(false);
@@ -2067,8 +2132,8 @@ socket.on("call_joined", async (payload) => {
   updateLocalVideoPreview();
   updateCallButtons();
   updateCallStatus();
-  if (callRole === "caller" && remotePeerId) {
-    await negotiate();
+  if (callRole === "caller") {
+    flushPendingSignals();
   }
 });
 
@@ -2077,12 +2142,10 @@ socket.on("call_peer", async (payload) => {
   updateRemoteIdentity(payload);
   callConnected = true;
   updateCallStatus();
-  if (callRole === "caller") {
-    await negotiate();
-  } else if (pendingRenegotiate) {
-    pendingRenegotiate = false;
-    await requestRenegotiate();
+  if (!peer) {
+    ensurePeer(callRole === "caller");
   }
+  flushPendingSignals();
 });
 
 socket.on("call_started", (payload) => {
@@ -2122,6 +2185,21 @@ socket.on("call_peer_left", () => {
 socket.on("call_ended", () => {
   if (!isInCall) {
     hideCallBanner();
+  }
+});
+
+socket.on("webrtc_signal", (payload) => {
+  if (!payload?.signal) {
+    return;
+  }
+  updateRemotePeer(payload.from);
+  if (!peer) {
+    ensurePeer(callRole === "caller");
+  }
+  try {
+    peer.signal(payload.signal);
+  } catch (error) {
+    // Ignore signaling errors.
   }
 });
 
