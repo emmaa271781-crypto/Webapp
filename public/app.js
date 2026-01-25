@@ -68,10 +68,9 @@ let voiceIsolationEnabled = true;
 let remoteHasAudio = false;
 let remoteHasVideo = false;
 let remotePeerId = null;
-let isPolite = false;
-let ignoreOffer = false;
 let localVad = null;
 let remoteVad = null;
+let callRole = null;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -205,9 +204,6 @@ const updateRemotePeer = (from) => {
     return;
   }
   remotePeerId = from;
-  if (socket.id && remotePeerId) {
-    isPolite = socket.id < remotePeerId;
-  }
 };
 
 const updateVoiceButton = () => {
@@ -931,10 +927,14 @@ const updateCallStatus = () => {
     callStatus.textContent = "Waiting";
     return;
   }
+  if (!remotePeerId) {
+    callStatus.textContent = "Waiting for peer";
+    return;
+  }
   if (remoteHasAudio || remoteHasVideo) {
     callStatus.textContent = "Connected";
   } else {
-    callStatus.textContent = "Waiting";
+    callStatus.textContent = "Connecting";
   }
 };
 
@@ -1281,7 +1281,7 @@ const createPeerConnection = async () => {
 
   peerConnection.onnegotiationneeded = () => {
     if (isInCall) {
-      negotiate();
+      requestRenegotiate();
     }
   };
 
@@ -1295,6 +1295,20 @@ const createPeerConnection = async () => {
   return peerConnection;
 };
 
+const requestRenegotiate = async () => {
+  if (!peerConnection) {
+    return;
+  }
+  if (!remotePeerId) {
+    return;
+  }
+  if (callRole === "caller") {
+    await negotiate();
+    return;
+  }
+  socket.emit("call_negotiate", { to: remotePeerId });
+};
+
 const negotiate = async () => {
   if (!peerConnection) {
     return;
@@ -1305,12 +1319,18 @@ const negotiate = async () => {
   if (isMakingOffer) {
     return;
   }
+  if (callRole !== "caller" || !remotePeerId) {
+    return;
+  }
   try {
     isMakingOffer = true;
     await peerConnection.setLocalDescription(
       await peerConnection.createOffer()
     );
-    socket.emit("webrtc_offer", { offer: peerConnection.localDescription });
+    socket.emit("webrtc_offer", {
+      offer: peerConnection.localDescription,
+      to: remotePeerId,
+    });
   } catch (error) {
     // Ignore negotiation errors.
   } finally {
@@ -1324,7 +1344,7 @@ const attachAudioTrack = async (track) => {
   }
   await audioTransceiver.sender.replaceTrack(track);
   audioTransceiver.direction = "sendrecv";
-  await negotiate();
+  await requestRenegotiate();
 };
 
 const attachVideoTrack = async (track) => {
@@ -1333,7 +1353,7 @@ const attachVideoTrack = async (track) => {
   }
   await videoTransceiver.sender.replaceTrack(track);
   videoTransceiver.direction = "sendrecv";
-  await negotiate();
+  await requestRenegotiate();
 };
 
 const clearVideoTrack = async () => {
@@ -1342,11 +1362,12 @@ const clearVideoTrack = async () => {
   }
   await videoTransceiver.sender.replaceTrack(null);
   videoTransceiver.direction = "recvonly";
-  await negotiate();
+  await requestRenegotiate();
 };
 
 const endCall = (notifyPeer) => {
   if (notifyPeer) {
+    socket.emit("call_leave");
     socket.emit("webrtc_hangup");
   }
   if (peerConnection) {
@@ -1371,8 +1392,8 @@ const endCall = (notifyPeer) => {
   audioTransceiver = null;
   videoTransceiver = null;
   isMakingOffer = false;
-  ignoreOffer = false;
   remotePeerId = null;
+  callRole = null;
   isInCall = false;
   isSharingScreen = false;
   isMicMuted = false;
@@ -1392,7 +1413,7 @@ const endCall = (notifyPeer) => {
   updateCallButtons();
 };
 
-const startCall = async () => {
+const startCall = () => {
   if (!currentUser) {
     setJoinError("Enter name and password to join.");
     openOverlay();
@@ -1401,21 +1422,7 @@ const startCall = async () => {
   if (isInCall) {
     return;
   }
-  try {
-    await createPeerConnection();
-    if (!isInCall) {
-      isInCall = true;
-      isMicMuted = true;
-      isCameraEnabled = false;
-    }
-    showCallPanel();
-    updateLocalVideoPreview();
-    updateCallButtons();
-    await negotiate();
-  } catch (error) {
-    addSystemMessage("Call failed. Try again.");
-    endCall(false);
-  }
+  socket.emit("call_join");
 };
 
 const stopScreenShare = () => {
@@ -1787,26 +1794,25 @@ socket.on("webrtc_offer", async (payload) => {
   }
   try {
     updateRemotePeer(payload.from);
-    await createPeerConnection();
-    const offerCollision =
-      payload.offer.type === "offer" &&
-      (isMakingOffer || peerConnection.signalingState !== "stable");
-    ignoreOffer = !isPolite && offerCollision;
-    if (ignoreOffer) {
+    if (callRole === "caller") {
       return;
     }
-    if (offerCollision) {
-      await peerConnection.setLocalDescription({ type: "rollback" });
-    }
+    await createPeerConnection();
     await peerConnection.setRemoteDescription(payload.offer);
     if (payload.offer.type === "offer") {
       const answer = await peerConnection.createAnswer();
       await peerConnection.setLocalDescription(answer);
-      socket.emit("webrtc_answer", { answer: peerConnection.localDescription });
+      socket.emit("webrtc_answer", {
+        answer: peerConnection.localDescription,
+        to: payload.from,
+      });
     }
-    isInCall = true;
-    isMicMuted = true;
-    isCameraEnabled = false;
+    if (!isInCall) {
+      isInCall = true;
+      isMicMuted = true;
+      isCameraEnabled = false;
+      callRole = "callee";
+    }
     showCallPanel();
     updateLocalVideoPreview();
     updateCallButtons();
@@ -1821,6 +1827,9 @@ socket.on("webrtc_answer", async (payload) => {
     return;
   }
   try {
+    if (callRole !== "caller") {
+      return;
+    }
     updateRemotePeer(payload.from);
     await peerConnection.setRemoteDescription(payload.answer);
   } catch (error) {
@@ -1833,9 +1842,6 @@ socket.on("webrtc_ice", async (payload) => {
     return;
   }
   try {
-    if (ignoreOffer) {
-      return;
-    }
     updateRemotePeer(payload.from);
     await peerConnection.addIceCandidate(payload.candidate);
   } catch (error) {
@@ -1845,6 +1851,53 @@ socket.on("webrtc_ice", async (payload) => {
 
 socket.on("webrtc_hangup", () => {
   endCall(false);
+});
+
+socket.on("call_joined", async (payload) => {
+  callRole = payload?.role || "caller";
+  updateRemotePeer(payload?.peerId);
+  if (isInCall) {
+    return;
+  }
+  isInCall = true;
+  isMicMuted = true;
+  isCameraEnabled = false;
+  try {
+    await createPeerConnection();
+  } catch (error) {
+    addSystemMessage("Call setup failed.");
+    endCall(false);
+    return;
+  }
+  showCallPanel();
+  updateLocalVideoPreview();
+  updateCallButtons();
+  updateCallStatus();
+  if (callRole === "caller" && remotePeerId) {
+    await negotiate();
+  }
+});
+
+socket.on("call_peer", async (payload) => {
+  updateRemotePeer(payload?.peerId);
+  updateCallStatus();
+  if (callRole === "caller") {
+    await negotiate();
+  }
+});
+
+socket.on("call_busy", () => {
+  addSystemMessage("Call is full. Try again later.");
+});
+
+socket.on("call_peer_left", () => {
+  endCall(false);
+});
+
+socket.on("call_negotiate", async () => {
+  if (callRole === "caller") {
+    await negotiate();
+  }
 });
 
 socket.on("history", (messages) => {

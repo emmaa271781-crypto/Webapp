@@ -24,6 +24,11 @@ const messageHistory = [];
 const connectedUsers = new Map();
 const typingUsers = new Map();
 const pushSubscriptions = new Map();
+const callState = {
+  callerId: null,
+  calleeId: null,
+};
+const callPeers = new Map();
 
 if (hasVapidKeys) {
   webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -278,6 +283,29 @@ const emitTyping = () => {
   io.to(ROOM_NAME).emit("typing_update", { users: names });
 };
 
+const clearCallState = () => {
+  callState.callerId = null;
+  callState.calleeId = null;
+  callPeers.clear();
+};
+
+const removeFromCall = (socketId) => {
+  const peerId = callPeers.get(socketId);
+  if (peerId) {
+    io.to(peerId).emit("call_peer_left", { from: socketId });
+  }
+  callPeers.delete(socketId);
+  if (peerId) {
+    callPeers.delete(peerId);
+  }
+  if (callState.callerId === socketId || callState.calleeId === socketId) {
+    clearCallState();
+  } else if (peerId &&
+    (callState.callerId === peerId || callState.calleeId === peerId)) {
+    clearCallState();
+  }
+};
+
 const toggleReaction = (message, emoji, username) => {
   if (!message.reactions) {
     message.reactions = {};
@@ -304,6 +332,8 @@ const toggleReaction = (message, emoji, username) => {
 };
 
 io.on("connection", (socket) => {
+  const getPeerId = () => callPeers.get(socket.id);
+
   socket.on("join", (payload) => {
     const username = sanitizeName(payload?.username);
     const password = String(payload?.password || "");
@@ -332,6 +362,34 @@ io.on("connection", (socket) => {
     } else if (!previousName) {
       socket.broadcast.emit("system", `${username} joined the chat`);
     }
+  });
+
+  socket.on("call_join", () => {
+    if (!socket.data.authed) {
+      return;
+    }
+    if (callPeers.has(socket.id) || callState.callerId === socket.id || callState.calleeId === socket.id) {
+      socket.emit("call_joined", { role: "caller", peerId: getPeerId() });
+      return;
+    }
+    if (!callState.callerId) {
+      callState.callerId = socket.id;
+      socket.emit("call_joined", { role: "caller" });
+      return;
+    }
+    if (!callState.calleeId) {
+      callState.calleeId = socket.id;
+      callPeers.set(callState.callerId, socket.id);
+      callPeers.set(socket.id, callState.callerId);
+      socket.emit("call_joined", { role: "callee", peerId: callState.callerId });
+      io.to(callState.callerId).emit("call_peer", { peerId: socket.id });
+      return;
+    }
+    socket.emit("call_busy");
+  });
+
+  socket.on("call_leave", () => {
+    removeFromCall(socket.id);
   });
 
   socket.on("message", (payload) => {
@@ -473,7 +531,11 @@ io.on("connection", (socket) => {
     if (!payload?.offer) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_offer", {
+    const target = payload.to || getPeerId();
+    if (!target) {
+      return;
+    }
+    io.to(target).emit("webrtc_offer", {
       offer: payload.offer,
       from: socket.id,
     });
@@ -486,7 +548,11 @@ io.on("connection", (socket) => {
     if (!payload?.answer) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_answer", {
+    const target = payload.to || getPeerId();
+    if (!target) {
+      return;
+    }
+    io.to(target).emit("webrtc_answer", {
       answer: payload.answer,
       from: socket.id,
     });
@@ -499,7 +565,11 @@ io.on("connection", (socket) => {
     if (!payload?.candidate) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_ice", {
+    const target = payload.to || getPeerId();
+    if (!target) {
+      return;
+    }
+    io.to(target).emit("webrtc_ice", {
       candidate: payload.candidate,
       from: socket.id,
     });
@@ -509,7 +579,21 @@ io.on("connection", (socket) => {
     if (!socket.data.authed) {
       return;
     }
-    socket.to(ROOM_NAME).emit("webrtc_hangup", { from: socket.id });
+    const target = getPeerId();
+    if (target) {
+      io.to(target).emit("webrtc_hangup", { from: socket.id });
+    }
+  });
+
+  socket.on("call_negotiate", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    const target = payload?.to || getPeerId();
+    if (!target) {
+      return;
+    }
+    io.to(target).emit("call_negotiate", { from: socket.id });
   });
 
   socket.on("disconnect", () => {
@@ -523,6 +607,7 @@ io.on("connection", (socket) => {
     typingUsers.delete(socket.id);
     emitPresence();
     emitTyping();
+    removeFromCall(socket.id);
   });
 });
 
