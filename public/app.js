@@ -1364,6 +1364,7 @@ const createPeerConnection = async () => {
     event.track.addEventListener("unmute", () => {
       if (event.track.kind === "audio") {
         remoteHasAudio = true;
+        ensureRemoteAudioPlayback();
       }
       if (event.track.kind === "video") {
         remoteHasVideo = true;
@@ -2068,12 +2069,14 @@ socket.on("call_started", (payload) => {
 });
 
 socket.on("call_connected", (payload) => {
+  updateRemotePeer(payload?.peerId);
   updateRemoteIdentity(payload);
   callConnected = true;
   updateCallStatus();
 });
 
 socket.on("call_peer_update", (payload) => {
+  updateRemotePeer(payload?.peerId);
   updateRemoteIdentity(payload);
 });
 
