@@ -28,6 +28,11 @@ const callEndButton = document.getElementById("call-end");
 const callPanel = document.getElementById("call-panel");
 const localVideo = document.getElementById("local-video");
 const remoteVideo = document.getElementById("remote-video");
+const soundToggle = document.getElementById("sound-toggle");
+const notifyToggle = document.getElementById("notify-toggle");
+const replyBanner = document.getElementById("reply-banner");
+const replyText = document.getElementById("reply-text");
+const replyCancel = document.getElementById("reply-cancel");
 
 let currentUser = "";
 let peerConnection = null;
@@ -37,6 +42,13 @@ let remoteStream = null;
 let isInCall = false;
 let isSharingScreen = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
+const baseTitle = document.title;
+let unreadCount = 0;
+let soundEnabled = false;
+let notifyEnabled = false;
+let replyTarget = null;
+const messagesById = new Map();
+const reactionEmojis = ["👍", "😂", "❤️", "🎉", "😮"];
 
 const emojiList = [
   "😀",
@@ -131,6 +143,88 @@ const formatTime = (isoString) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
+const updateTitle = () => {
+  document.title = unreadCount ? `(${unreadCount}) ${baseTitle}` : baseTitle;
+};
+
+const resetUnread = () => {
+  unreadCount = 0;
+  updateTitle();
+};
+
+const updateSoundButton = () => {
+  soundToggle.textContent = soundEnabled ? "Sound: On" : "Sound: Off";
+};
+
+const updateNotifyButton = () => {
+  notifyToggle.textContent = notifyEnabled ? "🔔 Notify: On" : "🔔 Notify";
+};
+
+const saveSetting = (key, value) => {
+  try {
+    localStorage.setItem(key, value ? "true" : "false");
+  } catch (error) {
+    // Ignore storage failures.
+  }
+};
+
+const loadSetting = (key) => {
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch (error) {
+    return false;
+  }
+};
+
+const playSound = () => {
+  if (!soundEnabled) {
+    return;
+  }
+  try {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return;
+    }
+    const context = new AudioContextClass();
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = "sine";
+    oscillator.frequency.value = 660;
+    gain.gain.value = 0.08;
+    oscillator.connect(gain);
+    gain.connect(context.destination);
+    oscillator.start();
+    oscillator.stop(context.currentTime + 0.15);
+    oscillator.onended = () => {
+      context.close();
+    };
+  } catch (error) {
+    // Ignore sound failures.
+  }
+};
+
+const notifyTab = (message) => {
+  if (document.hidden) {
+    unreadCount += 1;
+    updateTitle();
+    playSound();
+    if (notifyEnabled && "Notification" in window) {
+      if (Notification.permission === "granted") {
+        const title = message.user
+          ? `New message from ${message.user}`
+          : "New message";
+        const body = message.preview || "Open the tab to view.";
+        const notification = new Notification(title, { body });
+        notification.onclick = () => {
+          window.focus();
+          notification.close();
+        };
+      }
+    }
+  }
+};
+
 const isGifUrl = (value) => {
   const text = String(value || "").trim();
   if (!/^https?:\/\//i.test(text)) {
@@ -139,11 +233,104 @@ const isGifUrl = (value) => {
   return /\.gif(\?|#|$)/i.test(text);
 };
 
+const getMessagePreview = (message) => {
+  if (message?.type === "file" && message.file) {
+    const label = message.file.kind === "video" ? "video" : "image";
+    return `[${label}] ${message.file.name || "attachment"}`;
+  }
+  const text = String(message?.text || "").trim();
+  if (isGifUrl(text)) {
+    return "[gif]";
+  }
+  return text.slice(0, 120);
+};
+
 const scrollToBottom = () => {
   if (!chatPanel) {
     return;
   }
   chatPanel.scrollTop = chatPanel.scrollHeight;
+};
+
+const getReactionUsers = (message, emoji) => {
+  const reactions = message?.reactions || {};
+  const users = reactions[emoji];
+  return Array.isArray(users) ? users : [];
+};
+
+const refreshReactionBar = (bar, message) => {
+  const reactions = message?.reactions || {};
+  bar.querySelectorAll(".reaction-button").forEach((button) => {
+    const emoji = button.dataset.emoji;
+    const users = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
+    const count = users.length;
+    const countEl = button.querySelector(".reaction-count");
+    if (countEl) {
+      countEl.textContent = count ? String(count) : "";
+    }
+    button.classList.toggle("active", users.includes(currentUser));
+  });
+};
+
+const buildReactionBar = (message) => {
+  const bar = document.createElement("div");
+  bar.className = "reaction-bar";
+  reactionEmojis.forEach((emoji) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "reaction-button";
+    button.dataset.emoji = emoji;
+    const count = document.createElement("span");
+    count.className = "reaction-count";
+    button.append(emoji, " ");
+    button.appendChild(count);
+    button.addEventListener("click", () => {
+      if (!currentUser) {
+        setJoinError("Enter name and password to join.");
+        openOverlay();
+        return;
+      }
+      socket.emit("react", { messageId: message.id, emoji });
+    });
+    bar.appendChild(button);
+  });
+  refreshReactionBar(bar, message);
+  return bar;
+};
+
+const updateMessageReactions = (messageId, reactions) => {
+  const message = messagesById.get(messageId);
+  if (!message) {
+    return;
+  }
+  message.reactions = reactions || {};
+  const item = document.querySelector(`[data-message-id="${messageId}"]`);
+  if (!item) {
+    return;
+  }
+  const bar = item.querySelector(".reaction-bar");
+  if (bar) {
+    refreshReactionBar(bar, message);
+  }
+};
+
+const setReplyTarget = (message) => {
+  if (!message?.id) {
+    return;
+  }
+  replyTarget = {
+    id: message.id,
+    user: message.user || "Unknown",
+    text: getMessagePreview(message),
+  };
+  replyText.textContent = `Replying to ${replyTarget.user}: ${replyTarget.text}`;
+  replyBanner.classList.add("show");
+};
+
+const clearReplyTarget = () => {
+  replyTarget = null;
+  replyText.textContent = "";
+  replyBanner.classList.remove("show");
 };
 
 const addSystemMessage = (text) => {
@@ -160,6 +347,10 @@ const addChatMessage = (message) => {
   if (message.user === currentUser) {
     item.classList.add("self");
   }
+  if (message.id) {
+    item.dataset.messageId = message.id;
+    messagesById.set(message.id, message);
+  }
 
   const meta = document.createElement("div");
   meta.className = "message-meta";
@@ -175,9 +366,22 @@ const addChatMessage = (message) => {
   meta.appendChild(user);
   meta.appendChild(time);
 
-  const text = document.createElement("p");
+  const text = document.createElement("div");
   text.className = "message-text";
   const messageType = message.type || (message.file ? "file" : "text");
+  if (message.replyTo) {
+    const reply = document.createElement("div");
+    reply.className = "reply-preview";
+    const replyUser = document.createElement("span");
+    replyUser.className = "reply-user";
+    replyUser.textContent = message.replyTo.user || "Unknown";
+    const replySnippet = document.createElement("span");
+    replySnippet.className = "reply-snippet";
+    replySnippet.textContent = message.replyTo.text || "";
+    reply.appendChild(replyUser);
+    reply.appendChild(replySnippet);
+    text.appendChild(reply);
+  }
   if (messageType === "file" && message.file?.url) {
     const file = message.file;
     if (file.kind === "video") {
@@ -205,12 +409,28 @@ const addChatMessage = (message) => {
       image.loading = "lazy";
       text.appendChild(image);
     } else {
-      text.textContent = messageText;
+      const textNode = document.createElement("span");
+      textNode.textContent = messageText;
+      text.appendChild(textNode);
     }
   }
 
   item.appendChild(meta);
   item.appendChild(text);
+  if (message.id) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    const replyButton = document.createElement("button");
+    replyButton.type = "button";
+    replyButton.className = "reply-button";
+    replyButton.textContent = "Reply";
+    replyButton.addEventListener("click", () => {
+      setReplyTarget(message);
+    });
+    actions.appendChild(replyButton);
+    actions.appendChild(buildReactionBar(message));
+    item.appendChild(actions);
+  }
   messagesList.appendChild(item);
   scrollToBottom();
 };
@@ -302,7 +522,11 @@ const sendGifUrl = (url) => {
     setGifError("Select a GIF to send.");
     return;
   }
-  socket.emit("message", { text: url });
+  socket.emit("message", {
+    text: url,
+    replyTo: replyTarget ? { id: replyTarget.id } : null,
+  });
+  clearReplyTarget();
   closeGifPanel();
 };
 
@@ -391,6 +615,7 @@ const handleFileUpload = (file) => {
     }
     socket.emit("message", {
       type: "file",
+      replyTo: replyTarget ? { id: replyTarget.id } : null,
       file: {
         url: result,
         name: file.name,
@@ -398,6 +623,7 @@ const handleFileUpload = (file) => {
         kind: file.type.startsWith("video/") ? "video" : "image",
       },
     });
+    clearReplyTarget();
   };
   reader.onerror = () => {
     setUploadError("File upload failed.");
@@ -569,6 +795,10 @@ joinForm.addEventListener("submit", (event) => {
   socket.emit("join", { username: name.slice(0, 32), password });
 });
 
+replyCancel.addEventListener("click", () => {
+  clearReplyTarget();
+});
+
 buildEmojiPicker();
 
 emojiToggle.addEventListener("click", () => {
@@ -598,6 +828,34 @@ gifSearchInput.addEventListener("keydown", (event) => {
     event.preventDefault();
     searchGifs();
   }
+});
+
+soundToggle.addEventListener("click", () => {
+  soundEnabled = !soundEnabled;
+  updateSoundButton();
+  saveSetting("soundEnabled", soundEnabled);
+});
+
+notifyToggle.addEventListener("click", async () => {
+  if (!("Notification" in window)) {
+    addSystemMessage("Notifications are not supported.");
+    return;
+  }
+  if (!notifyEnabled) {
+    const permission = await Notification.requestPermission();
+    if (permission !== "granted") {
+      addSystemMessage("Notifications are blocked.");
+      notifyEnabled = false;
+      updateNotifyButton();
+      saveSetting("notifyEnabled", notifyEnabled);
+      return;
+    }
+    notifyEnabled = true;
+  } else {
+    notifyEnabled = false;
+  }
+  updateNotifyButton();
+  saveSetting("notifyEnabled", notifyEnabled);
 });
 
 fileToggle.addEventListener("click", () => {
@@ -635,7 +893,11 @@ form.addEventListener("submit", (event) => {
   if (!text) {
     return;
   }
-  socket.emit("message", { text });
+  socket.emit("message", {
+    text,
+    replyTo: replyTarget ? { id: replyTarget.id } : null,
+  });
+  clearReplyTarget();
   input.value = "";
   input.focus();
 });
@@ -656,6 +918,7 @@ socket.on("auth_ok", (payload) => {
   closeGifPanel();
   closeEmojiPanel();
   setUploadError("");
+  clearReplyTarget();
   updateCallButtons();
 });
 
@@ -663,6 +926,7 @@ socket.on("auth_error", (message) => {
   currentUser = "";
   setJoinError(message || "Incorrect password.");
   passwordInput.value = "";
+  clearReplyTarget();
   openOverlay();
 });
 
@@ -719,6 +983,7 @@ socket.on("webrtc_hangup", () => {
 
 socket.on("history", (messages) => {
   messagesList.innerHTML = "";
+  messagesById.clear();
   if (!messages.length) {
     addSystemMessage("No messages yet. Start the conversation!");
     return;
@@ -728,6 +993,16 @@ socket.on("history", (messages) => {
 
 socket.on("message", (message) => {
   addChatMessage(message);
+  if (message.user !== currentUser) {
+    notifyTab({ user: message.user, preview: getMessagePreview(message) });
+  }
+});
+
+socket.on("reaction_update", (payload) => {
+  if (!payload?.messageId) {
+    return;
+  }
+  updateMessageReactions(payload.messageId, payload.reactions);
 });
 
 socket.on("system", (text) => {
@@ -736,4 +1011,17 @@ socket.on("system", (text) => {
 
 updateCallButtons();
 hideCallPanel();
+soundEnabled = loadSetting("soundEnabled");
+notifyEnabled = loadSetting("notifyEnabled");
+updateSoundButton();
+updateNotifyButton();
+updateTitle();
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    resetUnread();
+  }
+});
+window.addEventListener("focus", () => {
+  resetUnread();
+});
 openOverlay();

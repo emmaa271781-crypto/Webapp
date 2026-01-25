@@ -21,6 +21,12 @@
           <button id="call-end" class="call-button danger" type="button" disabled>
             Hang up
           </button>
+          <button id="sound-toggle" class="header-button" type="button">
+            Sound: Off
+          </button>
+          <button id="notify-toggle" class="header-button" type="button">
+            🔔 Notify
+          </button>
         </div>
       </header>
 
@@ -41,6 +47,10 @@
       </div>
 
       <form id="message-form" class="composer" autocomplete="off">
+        <div id="reply-banner" class="reply-banner">
+          <span id="reply-text"></span>
+          <button id="reply-cancel" type="button">Cancel</button>
+        </div>
         <div class="composer-row">
           <input
             id="message-input"

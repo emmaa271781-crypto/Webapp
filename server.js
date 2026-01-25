@@ -114,6 +114,29 @@ const sanitizeMessage = (value) => {
   return text.slice(0, 500);
 };
 
+const buildReplyPreview = (message) => {
+  if (!message) {
+    return null;
+  }
+  const preview = message.type === "file"
+    ? `[${message.file?.kind || "file"}] ${message.file?.name || "attachment"}`
+    : String(message.text || "").trim().slice(0, 120);
+  return {
+    id: message.id,
+    user: message.user,
+    text: preview || "message",
+  };
+};
+
+const resolveReply = (payload) => {
+  const replyId = String(payload?.replyTo?.id || "").trim();
+  if (!replyId) {
+    return null;
+  }
+  const original = messageHistory.find((item) => item.id === replyId);
+  return buildReplyPreview(original);
+};
+
 const sanitizeFile = (file) => {
   const url = String(file?.url || "");
   if (!url.startsWith("data:")) {
@@ -140,6 +163,31 @@ const addMessageToHistory = (message) => {
   if (messageHistory.length > MAX_HISTORY) {
     messageHistory.shift();
   }
+};
+
+const toggleReaction = (message, emoji, username) => {
+  if (!message.reactions) {
+    message.reactions = {};
+  }
+  const normalized = String(emoji || "").trim().slice(0, 8);
+  if (!normalized) {
+    return message.reactions;
+  }
+  const users = Array.isArray(message.reactions[normalized])
+    ? message.reactions[normalized]
+    : [];
+  const index = users.indexOf(username);
+  if (index >= 0) {
+    users.splice(index, 1);
+  } else {
+    users.push(username);
+  }
+  if (users.length) {
+    message.reactions[normalized] = users;
+  } else {
+    delete message.reactions[normalized];
+  }
+  return message.reactions;
 };
 
 io.on("connection", (socket) => {
@@ -173,6 +221,7 @@ io.on("connection", (socket) => {
     if (!socket.data.authed || !socket.data.username) {
       return;
     }
+    const replyTo = resolveReply(payload);
     const isFile = payload?.type === "file";
     let message = null;
     if (isFile) {
@@ -186,6 +235,8 @@ io.on("connection", (socket) => {
         user: socket.data.username,
         type: "file",
         file,
+        replyTo,
+        reactions: {},
         timestamp: new Date().toISOString(),
       };
     } else {
@@ -198,11 +249,33 @@ io.on("connection", (socket) => {
         user: socket.data.username,
         type: "text",
         text,
+        replyTo,
+        reactions: {},
         timestamp: new Date().toISOString(),
       };
     }
     addMessageToHistory(message);
     io.to(ROOM_NAME).emit("message", message);
+  });
+
+  socket.on("react", (payload) => {
+    if (!socket.data.authed || !socket.data.username) {
+      return;
+    }
+    const messageId = String(payload?.messageId || "").trim();
+    const emoji = String(payload?.emoji || "").trim();
+    if (!messageId || !emoji) {
+      return;
+    }
+    const message = messageHistory.find((item) => item.id === messageId);
+    if (!message) {
+      return;
+    }
+    const reactions = toggleReaction(message, emoji, socket.data.username);
+    io.to(ROOM_NAME).emit("reaction_update", {
+      messageId: message.id,
+      reactions,
+    });
   });
 
   socket.on("webrtc_offer", (payload) => {
