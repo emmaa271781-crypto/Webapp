@@ -57,6 +57,10 @@ let replyTarget = null;
 let editTarget = null;
 let typingTimer = null;
 let isTyping = false;
+let pushSubscription = null;
+let swRegistration = null;
+const pushSupported =
+  "serviceWorker" in navigator && "PushManager" in window;
 const messagesById = new Map();
 const reactionEmojis = ["👍", "😂", "❤️", "🎉", "😮"];
 
@@ -167,7 +171,9 @@ const updateSoundButton = () => {
 };
 
 const updateNotifyButton = () => {
-  notifyToggle.textContent = notifyEnabled ? "🔔 Notify: On" : "🔔 Notify";
+  notifyToggle.textContent = notifyEnabled
+    ? "🔔 Notify: On"
+    : "🔔 Notify: Off";
 };
 
 const saveSetting = (key, value) => {
@@ -184,6 +190,109 @@ const loadSetting = (key) => {
   } catch (error) {
     return false;
   }
+};
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) {
+    output[i] = raw.charCodeAt(i);
+  }
+  return output;
+};
+
+const registerServiceWorker = async () => {
+  if (!pushSupported) {
+    return null;
+  }
+  if (swRegistration) {
+    return swRegistration;
+  }
+  try {
+    swRegistration = await navigator.serviceWorker.register("/sw.js");
+    return swRegistration;
+  } catch (error) {
+    return null;
+  }
+};
+
+const getExistingSubscription = async () => {
+  const registration = await registerServiceWorker();
+  if (!registration) {
+    return null;
+  }
+  return registration.pushManager.getSubscription();
+};
+
+const fetchVapidKey = async () => {
+  const response = await fetch("/api/vapid-public-key");
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data?.error || "Push notifications not configured.";
+    throw new Error(message);
+  }
+  return data.publicKey;
+};
+
+const sendSubscription = async (subscription, username) => {
+  if (!subscription?.endpoint) {
+    return;
+  }
+  await fetch("/api/subscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      subscription,
+      username,
+    }),
+  });
+};
+
+const ensurePushSubscription = async (username) => {
+  const existing = await getExistingSubscription();
+  if (existing) {
+    pushSubscription = existing;
+    await sendSubscription(existing, username);
+    return existing;
+  }
+  const publicKey = await fetchVapidKey();
+  const registration = await registerServiceWorker();
+  if (!registration) {
+    throw new Error("Service workers not supported.");
+  }
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(publicKey),
+  });
+  pushSubscription = subscription;
+  await sendSubscription(subscription, username);
+  return subscription;
+};
+
+const syncPushSubscription = async () => {
+  if (!notifyEnabled || Notification.permission !== "granted") {
+    return;
+  }
+  const existing = await getExistingSubscription();
+  if (existing) {
+    pushSubscription = existing;
+    await sendSubscription(existing, currentUser);
+  }
+};
+
+const unsubscribePush = async () => {
+  if (!pushSubscription) {
+    return;
+  }
+  await fetch("/api/unsubscribe", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ endpoint: pushSubscription.endpoint }),
+  });
+  await pushSubscription.unsubscribe();
+  pushSubscription = null;
 };
 
 const playSound = () => {
@@ -795,10 +904,12 @@ const searchGifs = async () => {
     const response = await fetch(
       `/api/gifs?q=${encodeURIComponent(query)}`
     );
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
-      throw new Error("GIF search failed");
+      clearGifResults();
+      setGifError(data?.error || "GIF search failed.");
+      return;
     }
-    const data = await response.json();
     const results = Array.isArray(data.results) ? data.results : [];
     if (!results.length) {
       setGifError("No GIFs found.");
@@ -1111,9 +1222,18 @@ notifyToggle.addEventListener("click", async () => {
       saveSetting("notifyEnabled", notifyEnabled);
       return;
     }
-    notifyEnabled = true;
+    try {
+      await ensurePushSubscription(currentUser);
+      notifyEnabled = true;
+    } catch (error) {
+      addSystemMessage(
+        error?.message || "Push notifications not configured."
+      );
+      notifyEnabled = false;
+    }
   } else {
     notifyEnabled = false;
+    await unsubscribePush();
   }
   updateNotifyButton();
   saveSetting("notifyEnabled", notifyEnabled);
@@ -1196,6 +1316,9 @@ socket.on("auth_ok", (payload) => {
   clearReplyTarget();
   clearEditTarget();
   updateCallButtons();
+  if (notifyEnabled) {
+    syncPushSubscription();
+  }
 });
 
 socket.on("auth_error", (message) => {
@@ -1304,9 +1427,19 @@ updateCallButtons();
 hideCallPanel();
 soundEnabled = loadSetting("soundEnabled");
 notifyEnabled = loadSetting("notifyEnabled");
+if (notifyEnabled && Notification.permission !== "granted") {
+  notifyEnabled = false;
+  saveSetting("notifyEnabled", notifyEnabled);
+}
 updateSoundButton();
 updateNotifyButton();
 updateTitle();
+if (pushSupported) {
+  registerServiceWorker();
+}
+if (notifyEnabled) {
+  syncPushSubscription();
+}
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) {
     resetUnread();

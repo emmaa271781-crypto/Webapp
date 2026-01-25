@@ -2,6 +2,7 @@ const path = require("path");
 const http = require("http");
 const { randomUUID } = require("crypto");
 const express = require("express");
+const webPush = require("web-push");
 const { Server } = require("socket.io");
 
 const app = express();
@@ -12,14 +13,24 @@ const PORT = process.env.PORT || 3000;
 const MAX_HISTORY = 100;
 const REQUIRED_PASSWORD = process.env.CHAT_PASSWORD || "0327";
 const GIPHY_API_KEY = process.env.GIPHY_API_KEY || "";
-const TENOR_API_KEY = process.env.TENOR_API_KEY || "LIVDSRZULELA";
+const TENOR_API_KEY = process.env.TENOR_API_KEY || "";
 const GIF_LIMIT = 12;
 const MAX_FILE_CHARS = 4_500_000;
 const ROOM_NAME = "main";
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
+const hasVapidKeys = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
 const messageHistory = [];
 const connectedUsers = new Map();
 const typingUsers = new Map();
+const pushSubscriptions = new Map();
 
+if (hasVapidKeys) {
+  webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+app.use(express.json({ limit: "1mb" }));
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/healthz", (req, res) => {
@@ -28,7 +39,7 @@ app.get("/healthz", (req, res) => {
 
 const fetchGiphy = async (query) => {
   if (!GIPHY_API_KEY) {
-    return [];
+    return { results: [], error: null, used: false };
   }
   const url = new URL("https://api.giphy.com/v1/gifs/search");
   url.searchParams.set("api_key", GIPHY_API_KEY);
@@ -36,11 +47,15 @@ const fetchGiphy = async (query) => {
   url.searchParams.set("limit", String(GIF_LIMIT));
   url.searchParams.set("rating", "pg");
   const response = await fetch(url);
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return [];
+    return {
+      results: [],
+      error: data?.meta?.msg || "Giphy search failed.",
+      used: true,
+    };
   }
-  const data = await response.json();
-  return (data.data || [])
+  const results = (data.data || [])
     .map((gif) => {
       const images = gif.images || {};
       const urlValue = images.fixed_height?.url || images.original?.url;
@@ -54,9 +69,13 @@ const fetchGiphy = async (query) => {
       return { id: gif.id, url: urlValue, preview };
     })
     .filter(Boolean);
+  return { results, error: null, used: true };
 };
 
 const fetchTenor = async (query) => {
+  if (!TENOR_API_KEY) {
+    return { results: [], error: null, used: false };
+  }
   const url = new URL("https://tenor.googleapis.com/v2/search");
   url.searchParams.set("key", TENOR_API_KEY);
   url.searchParams.set("q", query);
@@ -64,11 +83,15 @@ const fetchTenor = async (query) => {
   url.searchParams.set("media_filter", "gif,tinygif");
   url.searchParams.set("contentfilter", "medium");
   const response = await fetch(url);
+  const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    return [];
+    return {
+      results: [],
+      error: data?.error?.message || "Tenor search failed.",
+      used: true,
+    };
   }
-  const data = await response.json();
-  return (data.results || [])
+  const results = (data.results || [])
     .map((gif) => {
       const media = gif.media_formats || {};
       const urlValue = media.gif?.url || media.tinygif?.url;
@@ -79,6 +102,7 @@ const fetchTenor = async (query) => {
       return { id: gif.id, url: urlValue, preview };
     })
     .filter(Boolean);
+  return { results, error: null, used: true };
 };
 
 app.get("/api/gifs", async (req, res) => {
@@ -87,14 +111,29 @@ app.get("/api/gifs", async (req, res) => {
     res.json({ results: [] });
     return;
   }
+  if (!GIPHY_API_KEY && !TENOR_API_KEY) {
+    res.status(400).json({
+      error: "GIF search not configured. Set TENOR_API_KEY in Railway.",
+    });
+    return;
+  }
   try {
-    const giphyResults = await fetchGiphy(query);
-    if (giphyResults.length) {
-      res.json({ results: giphyResults });
+    const giphy = await fetchGiphy(query);
+    if (giphy.results.length) {
+      res.json({ results: giphy.results, provider: "giphy" });
       return;
     }
-    const tenorResults = await fetchTenor(query);
-    res.json({ results: tenorResults });
+    const tenor = await fetchTenor(query);
+    if (tenor.results.length) {
+      res.json({ results: tenor.results, provider: "tenor" });
+      return;
+    }
+    const errorMessage = giphy.error || tenor.error;
+    if (errorMessage) {
+      res.status(502).json({ error: errorMessage });
+      return;
+    }
+    res.json({ results: [] });
   } catch (error) {
     res.status(500).json({ error: "GIF search failed." });
   }
@@ -115,6 +154,45 @@ const sanitizeMessage = (value) => {
   }
   return text.slice(0, 500);
 };
+
+const sanitizeDisplayName = (value) => {
+  const name = String(value || "").trim();
+  if (!name) {
+    return "";
+  }
+  return name.slice(0, 32);
+};
+
+app.get("/api/vapid-public-key", (req, res) => {
+  if (!hasVapidKeys) {
+    res.status(400).json({ error: "Push notifications not configured." });
+    return;
+  }
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+app.post("/api/subscribe", (req, res) => {
+  if (!hasVapidKeys) {
+    res.status(400).json({ error: "Push notifications not configured." });
+    return;
+  }
+  const subscription = req.body?.subscription;
+  if (!subscription?.endpoint) {
+    res.status(400).json({ error: "Missing subscription." });
+    return;
+  }
+  const username = sanitizeDisplayName(req.body?.username);
+  pushSubscriptions.set(subscription.endpoint, { subscription, username });
+  res.json({ ok: true });
+});
+
+app.post("/api/unsubscribe", (req, res) => {
+  const endpoint = String(req.body?.endpoint || "").trim();
+  if (endpoint) {
+    pushSubscriptions.delete(endpoint);
+  }
+  res.json({ ok: true });
+});
 
 const buildReplyPreview = (message) => {
   if (!message) {
@@ -171,6 +249,54 @@ const addMessageToHistory = (message) => {
   messageHistory.push(message);
   if (messageHistory.length > MAX_HISTORY) {
     messageHistory.shift();
+  }
+};
+
+const isUserConnected = (username) => {
+  if (!username) {
+    return false;
+  }
+  for (const name of connectedUsers.values()) {
+    if (name === username) {
+      return true;
+    }
+  }
+  return false;
+};
+
+const buildPushPreview = (message) => {
+  if (message.type === "file") {
+    const label = message.file?.kind || "file";
+    return `[${label}] ${message.file?.name || "attachment"}`;
+  }
+  const text = String(message.text || "").trim();
+  if (text.startsWith("http") && text.includes(".gif")) {
+    return "[gif]";
+  }
+  return text.slice(0, 120) || "New message";
+};
+
+const sendPushNotifications = async (message) => {
+  if (!hasVapidKeys || pushSubscriptions.size === 0) {
+    return;
+  }
+  const payload = JSON.stringify({
+    title: message.user ? `New message from ${message.user}` : "New message",
+    body: buildPushPreview(message),
+    url: "/",
+  });
+  const entries = Array.from(pushSubscriptions.entries());
+  for (const [endpoint, entry] of entries) {
+    if (entry.username && isUserConnected(entry.username)) {
+      continue;
+    }
+    try {
+      await webPush.sendNotification(entry.subscription, payload);
+    } catch (error) {
+      if (error?.statusCode === 404 || error?.statusCode === 410) {
+        pushSubscriptions.delete(endpoint);
+      }
+    }
   }
 };
 
@@ -291,6 +417,7 @@ io.on("connection", (socket) => {
     }
     addMessageToHistory(message);
     io.to(ROOM_NAME).emit("message", message);
+    sendPushNotifications(message);
   });
 
   socket.on("typing", (payload) => {
