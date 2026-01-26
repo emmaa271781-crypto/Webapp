@@ -8,6 +8,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const [isCameraEnabled, setIsCameraEnabled] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [connectionState, setConnectionState] = useState('disconnected');
+  const [connectionQuality, setConnectionQuality] = useState('good');
   
   const peerRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -227,7 +228,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       clearInterval(connectionHealthRef.current);
     }
 
-    connectionHealthRef.current = setInterval(() => {
+    connectionHealthRef.current = setInterval(async () => {
       if (!peerRef.current?._pc) {
         clearInterval(connectionHealthRef.current);
         return;
@@ -241,9 +242,38 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
 
       // Check if connection is healthy
       if (stats.iceConnectionState === 'connected' || stats.iceConnectionState === 'completed') {
-        // Connection is good
         setConnectionState('connected');
+        
+        // Get connection quality from stats (Discord-style)
+        try {
+          const statsReport = await peerRef.current._pc.getStats();
+          let packetsLost = 0;
+          let packetsReceived = 0;
+          
+          statsReport.forEach((report) => {
+            if (report.type === 'inbound-rtp' && report.mediaType === 'audio') {
+              packetsLost += report.packetsLost || 0;
+              packetsReceived += report.packetsReceived || 0;
+            }
+          });
+
+          const lossRate = packetsReceived > 0 ? packetsLost / packetsReceived : 0;
+          
+          if (lossRate < 0.01) {
+            setConnectionQuality('excellent');
+          } else if (lossRate < 0.03) {
+            setConnectionQuality('good');
+          } else if (lossRate < 0.05) {
+            setConnectionQuality('fair');
+          } else {
+            setConnectionQuality('poor');
+          }
+        } catch (err) {
+          // Stats not available, assume good
+          setConnectionQuality('good');
+        }
       } else if (stats.iceConnectionState === 'disconnected') {
+        setConnectionQuality('fair');
         // Try ICE restart
         try {
           peerRef.current._pc.restartIce();
@@ -252,6 +282,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         }
       } else if (stats.iceConnectionState === 'failed') {
         setConnectionState('error');
+        setConnectionQuality('poor');
         clearInterval(connectionHealthRef.current);
       }
     }, 3000); // Check every 3 seconds
@@ -567,6 +598,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     isCameraEnabled,
     isScreenSharing,
     connectionState,
+    connectionQuality,
     localVideoRef,
     remoteVideoRef,
     remoteAudioRef,

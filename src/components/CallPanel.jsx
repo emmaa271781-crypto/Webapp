@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useWebRTC } from '../hooks/useWebRTC';
+import ConnectionQuality from './ConnectionQuality';
 import './CallPanel.css';
 
 function CallPanel({
@@ -21,6 +22,7 @@ function CallPanel({
     isCameraEnabled,
     isScreenSharing,
     connectionState,
+    connectionQuality,
     localVideoRef,
     remoteVideoRef,
     remoteAudioRef,
@@ -82,9 +84,12 @@ function CallPanel({
     >
       <div className="call-header">
         <div className="call-title">Voice Call</div>
-        <span className={`call-status-pill ${connectionState === 'connected' ? 'connected' : ''}`}>
-          {getStatusText()}
-        </span>
+        <div className="call-status-group">
+          <ConnectionQuality connectionState={connectionState} quality={connectionQuality} />
+          <span className={`call-status-pill ${connectionState === 'connected' ? 'connected' : ''}`}>
+            {getStatusText()}
+          </span>
+        </div>
       </div>
       <div className="call-grid">
         <div className="call-tile">

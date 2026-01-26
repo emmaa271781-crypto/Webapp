@@ -18,6 +18,12 @@
   gap: 0.5rem;
 }
 
+.call-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .call-title {
   font-size: 0.85rem;
   color: #c7d2fe;
