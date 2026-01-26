@@ -10,6 +10,16 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
+const GAME_PORT = process.env.GAME_PORT || 2567;
+
+// Initialize Colyseus game server
+let gameServer = null;
+try {
+  const { gameServer: gs } = require("./server-games");
+  gameServer = gs;
+} catch (err) {
+  console.warn("⚠️  Game server not available:", err.message);
+}
 const MAX_HISTORY = 100;
 const REQUIRED_PASSWORD = process.env.CHAT_PASSWORD || "0327";
 const GIPHY_API_KEY = process.env.GIPHY_API_KEY || "";
