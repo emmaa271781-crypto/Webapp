@@ -234,10 +234,10 @@ function AppChatScope() {
                     </ConversationHeader.Actions>
                   </ConversationHeader.Content>
                 </ConversationHeader>
-          <MessageList
-            typingIndicator={typingIndicator}
-            scrollBehavior="smooth"
-          >
+                <MessageList
+                  typingIndicator={typingIndicator}
+                  scrollBehavior="smooth"
+                >
             {messages.map((msg) => {
               if (msg.deleted) {
                 return (
@@ -337,9 +337,9 @@ function AppChatScope() {
                 </div>
               );
             })}
-          </MessageList>
-            </ChatContainer>
-          </MainContainer>
+                </MessageList>
+              </ChatContainer>
+            </MainContainer>
           </div>
           <MessageComposer currentUser={currentUser} socket={socket} />
         </div>
