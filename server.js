@@ -35,8 +35,22 @@ if (hasVapidKeys) {
 }
 
 app.use(express.json({ limit: "1mb" }));
+
 // Serve built React app from public directory
-app.use(express.static(path.join(__dirname, "public")));
+const publicPath = path.join(__dirname, "public");
+app.use(express.static(publicPath, {
+  maxAge: "1h",
+  etag: true,
+  lastModified: true,
+}));
+
+// Log static file serving
+app.use((req, res, next) => {
+  if (req.path.startsWith("/assets") || req.path.includes(".")) {
+    console.log(`[STATIC] ${req.method} ${req.path}`);
+  }
+  next();
+});
 
 app.get("/healthz", (req, res) => {
   res.status(200).json({ status: "ok" });
@@ -752,13 +766,55 @@ io.on("connection", (socket) => {
 app.use((req, res, next) => {
   // Only serve index.html for non-API routes
   if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io") && !req.path.startsWith("/assets")) {
-    res.sendFile(path.join(__dirname, "public", "index.html"));
+    const indexPath = path.join(__dirname, "public", "index.html");
+    console.log(`[SPA] Serving index.html for ${req.path}`);
+    
+    // Check if index.html exists
+    const fs = require("fs");
+    if (!fs.existsSync(indexPath)) {
+      console.error(`[ERROR] index.html not found at ${indexPath}`);
+      console.error(`[ERROR] Public directory contents:`, fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : "Directory does not exist");
+      return res.status(500).json({ 
+        error: "React app not built. Run 'npm run build' first.",
+        path: indexPath,
+        publicDir: publicPath,
+        exists: fs.existsSync(publicPath)
+      });
+    }
+    
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        console.error(`[ERROR] Failed to send index.html:`, err);
+        res.status(500).json({ error: "Failed to serve React app", details: err.message });
+      }
+    });
   } else {
     next();
   }
 });
 
 server.listen(PORT, () => {
-  console.log(`Messenger running on port ${PORT}`);
-  console.log(`React app should be built and served from public/ directory`);
+  console.log(`========================================`);
+  console.log(`🚀 Messenger server running on port ${PORT}`);
+  console.log(`========================================`);
+  
+  // Check if React app is built
+  const fs = require("fs");
+  const indexPath = path.join(__dirname, "public", "index.html");
+  const publicPath = path.join(__dirname, "public");
+  
+  if (!fs.existsSync(publicPath)) {
+    console.warn(`⚠️  WARNING: public/ directory does not exist!`);
+    console.warn(`   Run 'npm run build' to build the React app.`);
+  } else if (!fs.existsSync(indexPath)) {
+    console.warn(`⚠️  WARNING: index.html not found in public/ directory!`);
+    console.warn(`   Run 'npm run build' to build the React app.`);
+    console.warn(`   Public directory contents:`, fs.readdirSync(publicPath));
+  } else {
+    console.log(`✅ React app found at ${indexPath}`);
+  }
+  
+  console.log(`📡 Socket.IO ready for connections`);
+  console.log(`🌐 Server ready at http://localhost:${PORT}`);
+  console.log(`========================================`);
 });

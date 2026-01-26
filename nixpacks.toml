@@ -5,7 +5,13 @@ nixPkgs = ["nodejs_20"]
 cmds = ["npm install --legacy-peer-deps"]
 
 [phases.build]
-cmds = ["npm run build"]
+cmds = [
+  "echo 'Building React app...'",
+  "npm run build",
+  "echo 'Build complete. Checking public directory...'",
+  "ls -la public/ || echo 'Public directory not found!'",
+  "ls -la public/index.html || echo 'index.html not found!'"
+]
 
 [start]
 cmd = "npm start"
