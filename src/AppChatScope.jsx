@@ -141,9 +141,9 @@ function AppChatScope() {
   if (showJoin || !currentUser) {
     console.log('[AppChatScope] Rendering JoinOverlay');
     return (
-      <AnimatePresence>
+      <div style={{ position: 'fixed', inset: 0, zIndex: 10000 }}>
         <JoinOverlay onJoin={handleJoin} initialAvatar={currentAvatar} />
-      </AnimatePresence>
+      </div>
     );
   }
 
