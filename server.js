@@ -20,6 +20,16 @@ try {
 } catch (err) {
   console.warn("⚠️  Game server not available:", err.message);
 }
+
+// Initialize boardgame.io server
+let boardgameServer = null;
+try {
+  const { server: bgServer } = require("./server-boardgame");
+  boardgameServer = bgServer;
+  console.log("✅ Boardgame.io server initialized");
+} catch (err) {
+  console.warn("⚠️  Boardgame.io server not available:", err.message);
+}
 const MAX_HISTORY = 100;
 const REQUIRED_PASSWORD = process.env.CHAT_PASSWORD || "0327";
 const GIPHY_API_KEY = process.env.GIPHY_API_KEY || "";

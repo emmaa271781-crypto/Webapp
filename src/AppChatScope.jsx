@@ -16,6 +16,8 @@ import { useCall } from './hooks/useCall';
 import JoinOverlay from './components/JoinOverlay';
 import ProfileOverlay from './components/ProfileOverlay';
 import GameCanvas from './components/GameCanvas';
+import BoardGame from './components/BoardGame';
+import GameSelector from './components/GameSelector';
 import CallPanel from './components/CallPanel';
 import CallBanner from './components/CallBanner';
 import TopBar from './components/TopBar';
@@ -34,7 +36,8 @@ function AppChatScope() {
   const [showGame, setShowGame] = useState(false);
   const [showGameSelector, setShowGameSelector] = useState(false);
   const [gameType, setGameType] = useState('pong');
-  const [boardgameType, setBoardgameType] = useState(null);
+  const [gameMode, setGameMode] = useState('realtime'); // 'realtime' or 'boardgame'
+  const [playerID, setPlayerID] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   
@@ -147,9 +150,47 @@ function AppChatScope() {
     );
   }
 
+  const handleGameSelect = (selectedGameType, mode) => {
+    setGameType(selectedGameType);
+    setGameMode(mode);
+    setShowGameSelector(false);
+    if (mode === 'boardgame') {
+      // Assign player ID (0 or 1) - in real implementation, this would come from server
+      setPlayerID('0'); // First player to join
+    }
+    setShowGame(true);
+  };
+
   if (showGame) {
-    return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} socket={socket} currentUser={currentUser} />;
+    if (gameMode === 'boardgame') {
+      return (
+        <BoardGame
+          gameType={gameType}
+          playerID={playerID}
+          onGameEnd={() => {
+            setShowGame(false);
+            setGameType('pong');
+            setGameMode('realtime');
+            setPlayerID(null);
+          }}
+          currentUser={currentUser}
+        />
+      );
+    } else {
+      return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} socket={socket} currentUser={currentUser} />;
+    }
   }
+
+  return (
+    <div className="app" style={{ height: '100vh' }}>
+      <AnimatePresence>
+        {showGameSelector && (
+          <GameSelector
+            onSelect={handleGameSelect}
+            onClose={() => setShowGameSelector(false)}
+          />
+        )}
+      </AnimatePresence>
 
   const typingIndicator = typingUsers.length > 0 ? (
     <TypingIndicator content={`${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing`} />
@@ -217,7 +258,7 @@ function AppChatScope() {
                   <ConversationHeader.Content userName="Private Chat Room">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
                       <button
-                        onClick={() => setShowGame(true)}
+                        onClick={() => setShowGameSelector(true)}
                         style={{
                           padding: '0.4rem 0.8rem',
                           marginRight: '0.5rem',
