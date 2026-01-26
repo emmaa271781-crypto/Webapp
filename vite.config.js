@@ -7,7 +7,7 @@ export default defineConfig({
   root: './src',
   build: {
     outDir: '../public',
-    emptyOutDir: false,
+    emptyOutDir: true,
     rollupOptions: {
       input: {
         main: path.resolve(__dirname, 'src/index.html'),
