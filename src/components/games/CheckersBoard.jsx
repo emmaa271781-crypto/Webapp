@@ -49,9 +49,9 @@ export function CheckersBoard({ G, ctx, moves, events, playerID }) {
 
   let status = '';
   if (ctx.gameover) {
-    status = ctx.gameover.winner === playerID ? 'You won!' : 'You lost!';
+    status = ctx.gameover.winner === currentPlayerID ? 'You won!' : 'You lost!';
   } else {
-    status = ctx.currentPlayer === playerID ? 'Your turn' : "Opponent's turn";
+    status = ctx.currentPlayer === currentPlayerID ? 'Your turn' : "Opponent's turn";
   }
 
   return (
