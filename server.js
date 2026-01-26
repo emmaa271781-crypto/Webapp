@@ -42,12 +42,13 @@ app.use(express.static(publicPath, {
   maxAge: "1h",
   etag: true,
   lastModified: true,
+  index: false, // Don't auto-serve index.html from static
 }));
 
 // Log static file serving
 app.use((req, res, next) => {
   if (req.path.startsWith("/assets") || req.path.includes(".")) {
-    console.log(`[STATIC] ${req.method} ${req.path}`);
+    console.log(`[STATIC] ${req.method} ${req.path} - ${res.statusCode}`);
   }
   next();
 });
@@ -764,33 +765,46 @@ io.on("connection", (socket) => {
 
 // Fallback to index.html for React app (must be after all API routes)
 app.use((req, res, next) => {
-  // Only serve index.html for non-API routes
-  if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io") && !req.path.startsWith("/assets")) {
-    const indexPath = path.join(__dirname, "public", "index.html");
-    console.log(`[SPA] Serving index.html for ${req.path}`);
-    
-    // Check if index.html exists
-    const fs = require("fs");
-    if (!fs.existsSync(indexPath)) {
-      console.error(`[ERROR] index.html not found at ${indexPath}`);
-      console.error(`[ERROR] Public directory contents:`, fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : "Directory does not exist");
-      return res.status(500).json({ 
-        error: "React app not built. Run 'npm run build' first.",
-        path: indexPath,
-        publicDir: publicPath,
-        exists: fs.existsSync(publicPath)
-      });
-    }
-    
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error(`[ERROR] Failed to send index.html:`, err);
-        res.status(500).json({ error: "Failed to serve React app", details: err.message });
-      }
-    });
-  } else {
-    next();
+  // Skip API, Socket.IO, and static asset routes
+  if (req.path.startsWith("/api") || req.path.startsWith("/socket.io") || req.path.startsWith("/assets")) {
+    return next();
   }
+  
+  // Skip if it's a file request (has extension)
+  if (req.path.includes(".") && !req.path.endsWith(".html")) {
+    return next();
+  }
+  
+  const indexPath = path.join(__dirname, "public", "index.html");
+  const fs = require("fs");
+  
+  console.log(`[SPA] Serving index.html for ${req.path}`);
+  
+  // Check if index.html exists
+  if (!fs.existsSync(indexPath)) {
+    console.error(`[ERROR] index.html not found at ${indexPath}`);
+    console.error(`[ERROR] Public directory contents:`, fs.existsSync(publicPath) ? fs.readdirSync(publicPath) : "Directory does not exist");
+    return res.status(500).json({ 
+      error: "React app not built. Run 'npm run build' first.",
+      path: indexPath,
+      publicDir: publicPath,
+      exists: fs.existsSync(publicPath)
+    });
+  }
+  
+  // Set no-cache headers to prevent browser from caching old version
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error(`[ERROR] Failed to send index.html:`, err);
+      res.status(500).json({ error: "Failed to serve React app", details: err.message });
+    } else {
+      console.log(`[SPA] ✅ Served index.html successfully for ${req.path}`);
+    }
+  });
 });
 
 server.listen(PORT, () => {
@@ -806,15 +820,41 @@ server.listen(PORT, () => {
   if (!fs.existsSync(publicPath)) {
     console.warn(`⚠️  WARNING: public/ directory does not exist!`);
     console.warn(`   Run 'npm run build' to build the React app.`);
-  } else if (!fs.existsSync(indexPath)) {
-    console.warn(`⚠️  WARNING: index.html not found in public/ directory!`);
-    console.warn(`   Run 'npm run build' to build the React app.`);
-    console.warn(`   Public directory contents:`, fs.readdirSync(publicPath));
   } else {
-    console.log(`✅ React app found at ${indexPath}`);
+    const files = fs.readdirSync(publicPath);
+    console.log(`📁 Public directory contents:`, files);
+    
+    if (!fs.existsSync(indexPath)) {
+      console.warn(`⚠️  WARNING: index.html not found in public/ directory!`);
+      console.warn(`   Run 'npm run build' to build the React app.`);
+    } else {
+      // Read and check index.html content
+      const indexContent = fs.readFileSync(indexPath, "utf8");
+      const hasReact = indexContent.includes("react") || indexContent.includes("React") || indexContent.includes("root");
+      const hasOldApp = indexContent.includes("app.js") || indexContent.includes("style.css");
+      
+      console.log(`✅ React app found at ${indexPath}`);
+      console.log(`   File size: ${(indexContent.length / 1024).toFixed(2)} KB`);
+      console.log(`   Contains React: ${hasReact ? "✅" : "❌"}`);
+      console.log(`   Contains old app.js: ${hasOldApp ? "⚠️  WARNING - OLD FILES DETECTED" : "✅"}`);
+      
+      if (hasOldApp) {
+        console.error(`   ❌ ERROR: index.html still references old app.js!`);
+        console.error(`   The React build may not have completed correctly.`);
+      }
+      
+      // Check for assets directory
+      const assetsPath = path.join(publicPath, "assets");
+      if (fs.existsSync(assetsPath)) {
+        const assetFiles = fs.readdirSync(assetsPath);
+        console.log(`   Assets directory: ${assetFiles.length} files`);
+      } else {
+        console.warn(`   ⚠️  No assets/ directory found - React build may be incomplete`);
+      }
+    }
   }
   
   console.log(`📡 Socket.IO ready for connections`);
-  console.log(`🌐 Server ready at http://localhost:${PORT}`);
+  console.log(`🌐 Server ready (Railway will use your custom domain)`);
   console.log(`========================================`);
 });
