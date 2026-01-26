@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { checkWebRTCSupport, getOptimalConstraints, ensureAudioPlayback } from '../utils/browserCompatibility';
 
+// WebRTC hook with browser compatibility and Discord-style connection verification
+
 export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
