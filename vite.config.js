@@ -9,9 +9,7 @@ export default defineConfig({
     outDir: '../public',
     emptyOutDir: true,
     rollupOptions: {
-      input: {
-        main: path.resolve(__dirname, 'src/index.html'),
-      },
+      input: path.resolve(__dirname, 'src/index.html'),
     },
     // Copy service worker after build
     copyPublicDir: false,

@@ -16,6 +16,26 @@ oldFiles.forEach(file => {
   }
 });
 
+// Check if index.html still references old files and warn
+const indexPath = path.join(publicDir, 'index.html');
+if (fs.existsSync(indexPath)) {
+  const indexContent = fs.readFileSync(indexPath, 'utf8');
+  if (indexContent.includes('app.js') || indexContent.includes('style.css')) {
+    console.error('❌ ERROR: index.html still references old app.js or style.css!');
+    console.error('   This means Vite did not properly build the React app.');
+    console.error('   The old public/index.html may have been preserved.');
+    console.error('   Attempting to fix by checking if src/index.html exists...');
+    
+    const srcIndexPath = path.join(projectRoot, 'src', 'index.html');
+    if (fs.existsSync(srcIndexPath)) {
+      console.log('   Found src/index.html - Vite should have used this.');
+      console.log('   The build may have failed or the old file was not replaced.');
+    }
+  } else {
+    console.log('✅ index.html is clean (no old file references)');
+  }
+}
+
 // Copy service worker to public directory after build
 const swDest = path.join(projectRoot, 'public', 'sw.js');
 
