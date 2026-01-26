@@ -780,6 +780,149 @@ io.on("connection", (socket) => {
     io.to(target).emit("call_restart", { from: socket.id });
   });
 
+  // Game handlers
+  const gameRooms = new Map(); // roomId -> { players: [], gameState: {}, ball: {}, paddle1: {}, paddle2: {} }
+  
+  socket.on("game_join", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    const gameType = payload?.gameType || "pong";
+    const roomId = `game_${gameType}`;
+    
+    if (!gameRooms.has(roomId)) {
+      gameRooms.set(roomId, {
+        players: [],
+        gameState: "waiting",
+        ball: { x: 400, y: 300, vx: 200, vy: 200 },
+        paddle1: 300,
+        paddle2: 300,
+      });
+    }
+    
+    const room = gameRooms.get(roomId);
+    const existingPlayer = room.players.find(p => p.id === socket.id);
+    
+    if (!existingPlayer) {
+      const isPlayer1 = room.players.length === 0;
+      room.players.push({
+        id: socket.id,
+        name: socket.data.username || "Player",
+        isPlayer1,
+      });
+      
+      socket.emit("game_joined", {
+        isPlayer1,
+        gameState: room.gameState,
+        opponentName: room.players.find(p => p.id !== socket.id)?.name || "",
+      });
+      
+      // Notify other players
+      socket.to(roomId).emit("game_joined", {
+        isPlayer1: !isPlayer1,
+        gameState: room.gameState,
+        opponentName: socket.data.username || "Player",
+      });
+      
+      // Start game if 2 players
+      if (room.players.length === 2 && room.gameState === "waiting") {
+        room.gameState = "playing";
+        io.to(roomId).emit("game_start");
+        // Start game loop
+        startGameLoop(roomId);
+      }
+    }
+    
+    socket.join(roomId);
+  });
+  
+  socket.on("game_move", (payload) => {
+    if (!socket.data.authed) return;
+    const gameType = "pong"; // Default for now
+    const roomId = `game_${gameType}`;
+    const room = gameRooms.get(roomId);
+    if (!room) return;
+    
+    const player = room.players.find(p => p.id === socket.id);
+    if (!player) return;
+    
+    if (payload.paddle === "paddle1" && player.isPlayer1) {
+      room.paddle1 = payload.y;
+    } else if (payload.paddle === "paddle2" && !player.isPlayer1) {
+      room.paddle2 = payload.y;
+    }
+    
+    // Broadcast to other players
+    socket.to(roomId).emit("game_state", {
+      paddle1: room.paddle1,
+      paddle2: room.paddle2,
+    });
+  });
+  
+  socket.on("game_leave", () => {
+    const gameType = "pong";
+    const roomId = `game_${gameType}`;
+    const room = gameRooms.get(roomId);
+    if (room) {
+      room.players = room.players.filter(p => p.id !== socket.id);
+      if (room.players.length === 0) {
+        gameRooms.delete(roomId);
+      } else {
+        io.to(roomId).emit("game_end");
+        room.gameState = "waiting";
+      }
+    }
+    socket.leave(roomId);
+  });
+  
+  // Game loop function
+  function startGameLoop(roomId) {
+    const room = gameRooms.get(roomId);
+    if (!room || room.gameState !== "playing") return;
+    
+    const gameInterval = setInterval(() => {
+      if (!gameRooms.has(roomId) || room.gameState !== "playing") {
+        clearInterval(gameInterval);
+        return;
+      }
+      
+      // Update ball position
+      room.ball.x += room.ball.vx * 0.016; // ~60fps
+      room.ball.y += room.ball.vy * 0.016;
+      
+      // Ball collision with walls
+      if (room.ball.y <= 10 || room.ball.y >= 590) {
+        room.ball.vy = -room.ball.vy;
+      }
+      
+      // Ball collision with paddles
+      if (room.ball.x <= 60 && room.ball.x >= 50) {
+        if (room.ball.y >= room.paddle1 - 50 && room.ball.y <= room.paddle1 + 50) {
+          room.ball.vx = -room.ball.vx;
+          room.ball.x = 60;
+        }
+      }
+      if (room.ball.x >= 740 && room.ball.x <= 750) {
+        if (room.ball.y >= room.paddle2 - 50 && room.ball.y <= room.paddle2 + 50) {
+          room.ball.vx = -room.ball.vx;
+          room.ball.x = 740;
+        }
+      }
+      
+      // Reset if ball goes out
+      if (room.ball.x < 0 || room.ball.x > 800) {
+        room.ball = { x: 400, y: 300, vx: 200, vy: 200 };
+      }
+      
+      // Broadcast game state
+      io.to(roomId).emit("game_state", {
+        ball: room.ball,
+        paddle1: room.paddle1,
+        paddle2: room.paddle2,
+      });
+    }, 16); // ~60fps
+  }
+
   socket.on("disconnect", () => {
     if (socket.data.authed && socket.data.username) {
       socket.broadcast.emit(
@@ -792,6 +935,9 @@ io.on("connection", (socket) => {
     emitPresence();
     emitTyping();
     removeFromCall(socket.id);
+    
+    // Leave game
+    socket.emit("game_leave");
   });
 });
 

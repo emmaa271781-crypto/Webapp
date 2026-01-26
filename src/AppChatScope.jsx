@@ -146,7 +146,7 @@ function AppChatScope() {
   }
 
   if (showGame) {
-    return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} />;
+    return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} socket={socket} currentUser={currentUser} />;
   }
 
   const typingIndicator = typingUsers.length > 0 ? (

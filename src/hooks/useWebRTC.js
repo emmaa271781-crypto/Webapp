@@ -501,44 +501,83 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
       // Stop screen share
+      console.log('[WebRTC] Stopping screen share');
       if (localStreamRef.current) {
         localStreamRef.current.getVideoTracks().forEach(track => {
-          if (track.getSettings().displaySurface === 'monitor') {
+          if (track.getSettings().displaySurface === 'monitor' || track.label.includes('screen')) {
             track.stop();
+            localStreamRef.current.removeTrack(track);
             if (peerRef.current && peerRef.current.removeTrack) {
-              peerRef.current.removeTrack(track, localStreamRef.current);
+              try {
+                peerRef.current.removeTrack(track, localStreamRef.current);
+              } catch (err) {
+                console.warn('[WebRTC] Error removing screen track:', err);
+              }
             }
           }
         });
       }
       setIsScreenSharing(false);
       
-      // Re-enable camera if it was on
+      // Re-enable camera if it was on before screen share
       if (isCameraEnabled) {
+        console.log('[WebRTC] Re-enabling camera after screen share');
         await toggleCamera();
+      } else {
+        // If no camera, trigger renegotiation to update remote
+        if (peerRef.current?.negotiate && callRole !== 'caller') {
+          try {
+            peerRef.current.negotiate();
+          } catch (err) {
+            console.warn('[WebRTC] Error negotiating after screen share stop:', err);
+          }
+        }
       }
     } else {
       // Start screen share
       try {
+        console.log('[WebRTC] Starting screen share');
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { 
+            width: { ideal: 1280 }, 
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
           audio: false,
         });
 
         const screenTrack = screenStream.getVideoTracks()[0];
+        if (!screenTrack) {
+          throw new Error('No screen track available');
+        }
         
+        // Ensure we have a local stream
         if (!localStreamRef.current) {
           localStreamRef.current = new MediaStream();
         }
 
-        // Replace camera track with screen track
-        const existingVideoTrack = localStreamRef.current.getVideoTracks()[0];
-        if (existingVideoTrack && peerRef.current?.replaceTrack) {
-          peerRef.current.replaceTrack(existingVideoTrack, screenTrack, localStreamRef.current);
-        } else {
-          localStreamRef.current.addTrack(screenTrack);
-          if (peerRef.current) {
+        // Stop existing video tracks (camera or previous screen share)
+        const existingVideoTracks = localStreamRef.current.getVideoTracks();
+        existingVideoTracks.forEach(track => {
+          localStreamRef.current.removeTrack(track);
+          if (peerRef.current?.removeTrack) {
+            try {
+              peerRef.current.removeTrack(track, localStreamRef.current);
+            } catch (err) {
+              console.warn('[WebRTC] Error removing existing video track:', err);
+            }
+          }
+        });
+
+        // Add screen track
+        localStreamRef.current.addTrack(screenTrack);
+        
+        if (peerRef.current) {
+          try {
             peerRef.current.addTrack(screenTrack, localStreamRef.current);
+            console.log('[WebRTC] Added screen track to peer');
+          } catch (err) {
+            console.warn('[WebRTC] Error adding screen track to peer:', err);
           }
         }
 
@@ -546,21 +585,46 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
+        // Handle screen share ending (user stops sharing in browser)
         screenTrack.onended = () => {
+          console.log('[WebRTC] Screen share ended by user');
           setIsScreenSharing(false);
+          // Clean up
+          if (localStreamRef.current) {
+            localStreamRef.current.removeTrack(screenTrack);
+          }
         };
 
         setIsScreenSharing(true);
-        if (isCameraEnabled) {
+        // Mark camera as disabled if it was on (we'll restore it when screen share stops)
+        const hadCamera = isCameraEnabled;
+        if (hadCamera) {
           setIsCameraEnabled(false);
         }
 
+        // Trigger renegotiation for callee
         if (callRole !== 'caller' && peerRef.current?.negotiate) {
-          peerRef.current.negotiate();
+          setTimeout(() => {
+            try {
+              peerRef.current.negotiate();
+              console.log('[WebRTC] Triggered renegotiation for screen share');
+            } catch (err) {
+              console.warn('[WebRTC] Error negotiating screen share:', err);
+            }
+          }, 100);
+        } else if (callRole === 'caller' && peerRef.current) {
+          // For caller, signals will be sent automatically via 'signal' event
+          console.log('[WebRTC] Screen share started, signals will be sent automatically');
         }
       } catch (err) {
         console.error('[WebRTC] Error sharing screen:', err);
-        alert('Failed to share screen. Please check permissions.');
+        if (err.name === 'NotAllowedError') {
+          alert('Screen sharing was denied. Please allow screen sharing permissions.');
+        } else if (err.name === 'NotFoundError') {
+          alert('No screen or window available to share.');
+        } else {
+          alert('Failed to share screen. Please check permissions and try again.');
+        }
       }
     }
   }, [isScreenSharing, isCameraEnabled, callRole, toggleCamera]);
@@ -584,14 +648,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         destroyPeer();
       }
       
-      // Auto-enable microphone when call starts (but keep it muted initially)
+      // Try to get local stream (audio optional - call works without mic)
+      // This allows calls to connect even if mic permission is denied
       getLocalStream(true, false).then(() => {
         console.log('[WebRTC] Local stream obtained, initializing peer');
         setIsMicMuted(true); // Start muted
         const peer = initPeer(callRole === 'caller');
         if (peer) {
           console.log('[WebRTC] Peer initialized, flushing pending signals');
-          // Small delay to ensure peer is fully ready
           setTimeout(() => {
             flushPendingSignals();
           }, 100);
@@ -599,9 +663,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
           console.error('[WebRTC] Failed to initialize peer');
         }
       }).catch(err => {
-        console.error('[WebRTC] Failed to get local stream:', err);
-        // Continue anyway - user can enable mic manually
-        console.log('[WebRTC] Initializing peer without local stream');
+        console.warn('[WebRTC] Could not get local stream (mic may be disabled):', err.message);
+        // Continue without local stream - call can still work for receiving audio
+        console.log('[WebRTC] Initializing peer without local stream - call will work for receiving');
+        setIsMicMuted(true);
+        // Create empty stream for peer initialization
+        if (!localStreamRef.current) {
+          localStreamRef.current = new MediaStream();
+        }
         const peer = initPeer(callRole === 'caller');
         if (peer) {
           setTimeout(() => {
