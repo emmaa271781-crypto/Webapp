@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import {
   MainContainer,
   ChatContainer,
@@ -7,30 +8,60 @@ import {
   MessageInput,
   TypingIndicator,
   ConversationHeader,
+  Avatar,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
 import { useSocket } from './hooks/useSocket';
 import { useMessages } from './hooks/useMessages';
 import { usePresence } from './hooks/usePresence';
+import { useCall } from './hooks/useCall';
 import JoinOverlay from './components/JoinOverlay';
+import ProfileOverlay from './components/ProfileOverlay';
 import GameCanvas from './components/GameCanvas';
+import CallPanel from './components/CallPanel';
+import CallBanner from './components/CallBanner';
+import TopBar from './components/TopBar';
+import Sidebar from './components/Sidebar';
 import './App.css';
 
 function AppChatScope() {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser, setCurrentUser] = useState('');
+  const [currentAvatar, setCurrentAvatar] = useState('');
   const [showJoin, setShowJoin] = useState(true);
+  const [showProfileOverlay, setShowProfileOverlay] = useState(false);
   const [showGame, setShowGame] = useState(false);
   const [gameType, setGameType] = useState('pong');
+  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [notifyEnabled, setNotifyEnabled] = useState(false);
+  
   const socket = useSocket();
   const { messages, addMessage, updateMessage, updateReactions } = useMessages();
   const { users, total, typingUsers } = usePresence(socket);
+  const {
+    isInCall,
+    callRole,
+    remotePeerId,
+    callConnected,
+    remoteProfile,
+    showCallPanel,
+    showCallBanner,
+    callBannerText,
+    startCall,
+    endCall,
+    joinCall,
+    dismissBanner,
+  } = useCall(socket, currentUser);
 
   useEffect(() => {
     if (!socket) return;
 
-    socket.on('auth_ok', ({ username }) => {
+    socket.on('auth_ok', (payload) => {
+      const username = payload?.username || payload;
       setCurrentUser(username);
       setShowJoin(false);
+      if (payload?.avatar) {
+        setCurrentAvatar(payload.avatar);
+      }
     });
 
     socket.on('auth_error', () => {
@@ -73,8 +104,20 @@ function AppChatScope() {
   const handleJoin = (username, password, avatar) => {
     if (socket) {
       socket.emit('join', { username, password, avatar });
+      setCurrentAvatar(avatar);
     }
   };
+
+  const handleProfileUpdate = (name, avatar) => {
+    setCurrentUser(name);
+    setCurrentAvatar(avatar);
+    if (socket) {
+      socket.emit('join', { username: name, password: '', avatar });
+    }
+  };
+
+  const toggleSound = () => setSoundEnabled(!soundEnabled);
+  const toggleNotify = () => setNotifyEnabled(!notifyEnabled);
 
   const handleSend = (innerHtml, textContent, innerText, nodes) => {
     if (!socket || !currentUser || !textContent.trim()) return;
@@ -96,7 +139,11 @@ function AppChatScope() {
   };
 
   if (showJoin || !currentUser) {
-    return <JoinOverlay onJoin={handleJoin} />;
+    return (
+      <AnimatePresence>
+        <JoinOverlay onJoin={handleJoin} initialAvatar={currentAvatar} />
+      </AnimatePresence>
+    );
   }
 
   if (showGame) {
@@ -108,36 +155,90 @@ function AppChatScope() {
   ) : null;
 
   return (
-    <div style={{ height: '100vh' }}>
-      <MainContainer>
-        <ChatContainer>
-          <ConversationHeader>
-            <ConversationHeader.Content>
-              <ConversationHeader.Info>
-                Private Chat Room
-              </ConversationHeader.Info>
-              <ConversationHeader.Actions>
-                <button
-                  onClick={() => setShowGame(true)}
-                  style={{
-                    padding: '0.4rem 0.8rem',
-                    marginRight: '0.5rem',
-                    borderRadius: '0.4rem',
-                    border: '1px solid #4ade80',
-                    background: 'transparent',
-                    color: '#4ade80',
-                    cursor: 'pointer',
-                    fontSize: '0.8rem',
-                  }}
-                >
-                  🎮 Play Game
-                </button>
-                <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>
-                  {total} online
-                </span>
-              </ConversationHeader.Actions>
-            </ConversationHeader.Content>
-          </ConversationHeader>
+    <div className="app" style={{ height: '100vh' }}>
+      <AnimatePresence>
+        {showProfileOverlay && (
+          <ProfileOverlay
+            currentName={currentUser}
+            currentAvatar={currentAvatar}
+            onClose={() => setShowProfileOverlay(false)}
+            onUpdate={handleProfileUpdate}
+          />
+        )}
+      </AnimatePresence>
+
+      <TopBar
+        currentUser={currentUser}
+        onProfileClick={() => setShowProfileOverlay(true)}
+        soundEnabled={soundEnabled}
+        notifyEnabled={notifyEnabled}
+        onSoundToggle={toggleSound}
+        onNotifyToggle={toggleNotify}
+        isInCall={isInCall}
+        onCallStart={startCall}
+        onCallEnd={endCall}
+      />
+
+      <div className="app-layout">
+        <Sidebar users={users} total={total} currentUser={currentUser} />
+
+        <div className="app-main">
+          <AnimatePresence>
+            {showCallBanner && (
+              <CallBanner
+                text={callBannerText}
+                onJoin={joinCall}
+                onDismiss={dismissBanner}
+              />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {showCallPanel && (
+              <CallPanel
+                currentUser={currentUser}
+                currentAvatar={currentAvatar}
+                remoteProfile={remoteProfile}
+                callRole={callRole}
+                callConnected={callConnected}
+                remotePeerId={remotePeerId}
+                socket={socket}
+                isInCall={isInCall}
+                onEnd={endCall}
+              />
+            )}
+          </AnimatePresence>
+
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <MainContainer style={{ flex: 1, minHeight: 0 }}>
+              <ChatContainer>
+                <ConversationHeader>
+                  <ConversationHeader.Content>
+                    <ConversationHeader.Info>
+                      Private Chat Room
+                    </ConversationHeader.Info>
+                    <ConversationHeader.Actions>
+                      <button
+                        onClick={() => setShowGame(true)}
+                        style={{
+                          padding: '0.4rem 0.8rem',
+                          marginRight: '0.5rem',
+                          borderRadius: '0.4rem',
+                          border: '1px solid #4ade80',
+                          background: 'transparent',
+                          color: '#4ade80',
+                          cursor: 'pointer',
+                          fontSize: '0.8rem',
+                        }}
+                      >
+                        🎮 Play Game
+                      </button>
+                      <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>
+                        {total} online
+                      </span>
+                    </ConversationHeader.Actions>
+                  </ConversationHeader.Content>
+                </ConversationHeader>
           <MessageList
             typingIndicator={typingIndicator}
             scrollBehavior="smooth"
@@ -194,14 +295,16 @@ function AppChatScope() {
                 </Message>
               );
             })}
-          </MessageList>
-          <MessageInput
-            placeholder="Type message here"
-            onSend={handleSend}
-            attachButton={false}
-          />
-        </ChatContainer>
-      </MainContainer>
+              </MessageList>
+              <MessageInput
+                placeholder="Type message here"
+                onSend={handleSend}
+                attachButton={false}
+              />
+            </ChatContainer>
+          </MainContainer>
+        </div>
+      </div>
     </div>
   );
 }
