@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Client } from 'boardgame.io/react';
-import { SocketIO } from 'boardgame.io/multiplayer';
 import { TicTacToeBoard } from './games/TicTacToeBoard';
 import { CheckersBoard } from './games/CheckersBoard';
 import { ConnectFourBoard } from './games/ConnectFourBoard';
