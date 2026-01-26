@@ -24,6 +24,105 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const connectionHealthRef = useRef(null);
   const iceConnectionStateRef = useRef('new');
 
+  // Connection health check helpers (defined first to avoid circular dependencies)
+  const stopConnectionHealthCheck = useCallback(() => {
+    if (connectionHealthRef.current) {
+      clearInterval(connectionHealthRef.current);
+      connectionHealthRef.current = null;
+    }
+  }, []);
+
+  const startConnectionHealthCheck = useCallback(() => {
+    if (connectionHealthRef.current) {
+      clearInterval(connectionHealthRef.current);
+    }
+
+    connectionHealthRef.current = setInterval(async () => {
+      if (!peerRef.current?._pc) {
+        clearInterval(connectionHealthRef.current);
+        return;
+      }
+
+      const stats = {
+        iceConnectionState: peerRef.current._pc.iceConnectionState,
+        connectionState: peerRef.current._pc.connectionState,
+        signalingState: peerRef.current._pc.signalingState,
+      };
+
+      // Check if connection is healthy
+      if (stats.iceConnectionState === 'connected' || stats.iceConnectionState === 'completed') {
+        setConnectionState('connected');
+        
+        // Get connection quality from stats (Discord-style)
+        try {
+          const statsReport = await peerRef.current._pc.getStats();
+          let packetsLost = 0;
+          let packetsReceived = 0;
+          
+          statsReport.forEach((report) => {
+            if (report.type === 'inbound-rtp' && report.mediaType === 'audio') {
+              packetsLost += report.packetsLost || 0;
+              packetsReceived += report.packetsReceived || 0;
+            }
+          });
+
+          const lossRate = packetsReceived > 0 ? packetsLost / packetsReceived : 0;
+          
+          if (lossRate < 0.01) {
+            setConnectionQuality('excellent');
+          } else if (lossRate < 0.03) {
+            setConnectionQuality('good');
+          } else if (lossRate < 0.05) {
+            setConnectionQuality('fair');
+          } else {
+            setConnectionQuality('poor');
+          }
+        } catch (err) {
+          // Stats not available, assume good
+          setConnectionQuality('good');
+        }
+      } else if (stats.iceConnectionState === 'disconnected') {
+        setConnectionQuality('fair');
+        // Try ICE restart
+        try {
+          peerRef.current._pc.restartIce();
+        } catch (err) {
+          console.warn('[WebRTC] ICE restart failed:', err);
+        }
+      } else if (stats.iceConnectionState === 'failed') {
+        setConnectionState('error');
+        setConnectionQuality('poor');
+        clearInterval(connectionHealthRef.current);
+      }
+    }, 3000); // Check every 3 seconds
+  }, []);
+
+  // Flush pending signals (defined before initPeer)
+  const flushPendingSignals = useCallback(() => {
+    if (!peerRef.current || !remotePeerId || !socket) return;
+    
+    pendingSignalsRef.current.forEach(signal => {
+      socket.emit('webrtc_signal', { signal, to: remotePeerId });
+    });
+    pendingSignalsRef.current = [];
+  }, [socket, remotePeerId]);
+
+  // Destroy peer connection (defined before initPeer)
+  const destroyPeer = useCallback(() => {
+    stopConnectionHealthCheck();
+    if (peerRef.current) {
+      try {
+        peerRef.current.destroy();
+      } catch (err) {
+        console.warn('[WebRTC] Error destroying peer:', err);
+      }
+      peerRef.current = null;
+    }
+    pendingSignalsRef.current = [];
+    reconnectAttemptsRef.current = 0;
+    iceConnectionStateRef.current = 'new';
+  }, [stopConnectionHealthCheck]);
+
   // Initialize SimplePeer
   const initPeer = useCallback((initiator) => {
     if (peerRef.current) {
@@ -200,106 +299,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
 
     peerRef.current = peer;
     return peer;
-  }, [socket, remotePeerId, isInCall, callRole, onCallEnd]);
-
-  // Destroy peer connection
-  const destroyPeer = useCallback(() => {
-    stopConnectionHealthCheck();
-    if (peerRef.current) {
-      try {
-        peerRef.current.destroy();
-      } catch (err) {
-        console.warn('[WebRTC] Error destroying peer:', err);
-      }
-      peerRef.current = null;
-    }
-    pendingSignalsRef.current = [];
-    reconnectAttemptsRef.current = 0;
-    iceConnectionStateRef.current = 'new';
-  }, [stopConnectionHealthCheck]);
-
-  // Flush pending signals
-  const flushPendingSignals = useCallback(() => {
-    if (!peerRef.current || !remotePeerId || !socket) return;
-    
-    pendingSignalsRef.current.forEach(signal => {
-      socket.emit('webrtc_signal', { signal, to: remotePeerId });
-    });
-    pendingSignalsRef.current = [];
-  }, [socket, remotePeerId]);
-
-  // Connection health check (Discord-style)
-  const startConnectionHealthCheck = useCallback(() => {
-    if (connectionHealthRef.current) {
-      clearInterval(connectionHealthRef.current);
-    }
-
-    connectionHealthRef.current = setInterval(async () => {
-      if (!peerRef.current?._pc) {
-        clearInterval(connectionHealthRef.current);
-        return;
-      }
-
-      const stats = {
-        iceConnectionState: peerRef.current._pc.iceConnectionState,
-        connectionState: peerRef.current._pc.connectionState,
-        signalingState: peerRef.current._pc.signalingState,
-      };
-
-      // Check if connection is healthy
-      if (stats.iceConnectionState === 'connected' || stats.iceConnectionState === 'completed') {
-        setConnectionState('connected');
-        
-        // Get connection quality from stats (Discord-style)
-        try {
-          const statsReport = await peerRef.current._pc.getStats();
-          let packetsLost = 0;
-          let packetsReceived = 0;
-          
-          statsReport.forEach((report) => {
-            if (report.type === 'inbound-rtp' && report.mediaType === 'audio') {
-              packetsLost += report.packetsLost || 0;
-              packetsReceived += report.packetsReceived || 0;
-            }
-          });
-
-          const lossRate = packetsReceived > 0 ? packetsLost / packetsReceived : 0;
-          
-          if (lossRate < 0.01) {
-            setConnectionQuality('excellent');
-          } else if (lossRate < 0.03) {
-            setConnectionQuality('good');
-          } else if (lossRate < 0.05) {
-            setConnectionQuality('fair');
-          } else {
-            setConnectionQuality('poor');
-          }
-        } catch (err) {
-          // Stats not available, assume good
-          setConnectionQuality('good');
-        }
-      } else if (stats.iceConnectionState === 'disconnected') {
-        setConnectionQuality('fair');
-        // Try ICE restart
-        try {
-          peerRef.current._pc.restartIce();
-        } catch (err) {
-          console.warn('[WebRTC] ICE restart failed:', err);
-        }
-      } else if (stats.iceConnectionState === 'failed') {
-        setConnectionState('error');
-        setConnectionQuality('poor');
-        clearInterval(connectionHealthRef.current);
-      }
-    }, 3000); // Check every 3 seconds
-  }, []);
-
-  const stopConnectionHealthCheck = useCallback(() => {
-    if (connectionHealthRef.current) {
-      clearInterval(connectionHealthRef.current);
-      connectionHealthRef.current = null;
-    }
-  }, []);
+  }, [socket, remotePeerId, isInCall, callRole, onCallEnd, startConnectionHealthCheck, destroyPeer, flushPendingSignals]);
 
   // Get local media stream
   const getLocalStream = useCallback(async (audio = true, video = false) => {
