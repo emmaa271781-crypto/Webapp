@@ -1,10 +1,11 @@
 import React from 'react';
 import './TicTacToeBoard.css';
 
-export function TicTacToeBoard({ G, ctx, moves, events }) {
-  const playerID = ctx.playerID || '0';
+export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
+  const currentPlayerID = playerID || ctx.playerID || '0';
+  
   const onClick = (id) => {
-    if (G.cells[id] === null && ctx.currentPlayer === playerID) {
+    if (G.cells[id] === null && ctx.currentPlayer === currentPlayerID) {
       moves.clickCell(id);
     }
   };
@@ -18,9 +19,9 @@ export function TicTacToeBoard({ G, ctx, moves, events }) {
     return (
       <button
         key={id}
-        className={`tictactoe-cell ${value !== null ? 'filled' : ''} ${ctx.currentPlayer === playerID && value === null ? 'clickable' : ''}`}
+        className={`tictactoe-cell ${value !== null ? 'filled' : ''} ${ctx.currentPlayer === currentPlayerID && value === null ? 'clickable' : ''}`}
         onClick={() => onClick(id)}
-        disabled={value !== null || ctx.currentPlayer !== playerID}
+        disabled={value !== null || ctx.currentPlayer !== currentPlayerID}
       >
         {symbol}
       </button>
@@ -30,12 +31,12 @@ export function TicTacToeBoard({ G, ctx, moves, events }) {
   let status = '';
   if (ctx.gameover) {
     if (ctx.gameover.winner !== undefined) {
-      status = `Winner: Player ${ctx.gameover.winner === playerID ? 'You' : 'Opponent'}`;
+      status = `Winner: Player ${ctx.gameover.winner === currentPlayerID ? 'You' : 'Opponent'}`;
     } else {
       status = 'Draw!';
     }
   } else {
-    status = ctx.currentPlayer === playerID ? 'Your turn' : "Opponent's turn";
+    status = ctx.currentPlayer === currentPlayerID ? 'Your turn' : "Opponent's turn";
   }
 
   return (

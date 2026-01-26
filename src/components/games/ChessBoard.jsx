@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import './ChessBoard.css';
 
-export function ChessBoard({ G, ctx, moves, events }) {
-  const playerID = ctx.playerID || '0';
+export function ChessBoard({ G, ctx, moves, events, playerID }) {
+  const currentPlayerID = playerID || ctx.playerID || '0';
   const [selectedCell, setSelectedCell] = useState(null);
 
   const onClick = (id) => {
@@ -26,7 +26,7 @@ export function ChessBoard({ G, ctx, moves, events }) {
         key={id}
         className={`chess-cell ${isDark ? 'dark' : 'light'} ${isSelected ? 'selected' : ''}`}
         onClick={() => onClick(id)}
-        disabled={ctx.currentPlayer !== playerID}
+        disabled={ctx.currentPlayer !== currentPlayerID}
       >
         {piece !== null && <span className="chess-piece">{piece}</span>}
       </button>
@@ -35,9 +35,9 @@ export function ChessBoard({ G, ctx, moves, events }) {
 
   let status = '';
   if (ctx.gameover) {
-    status = ctx.gameover.winner === playerID ? 'You won!' : 'You lost!';
+    status = ctx.gameover.winner === currentPlayerID ? 'You won!' : 'You lost!';
   } else {
-    status = ctx.currentPlayer === playerID ? 'Your turn' : "Opponent's turn";
+    status = ctx.currentPlayer === currentPlayerID ? 'Your turn' : "Opponent's turn";
   }
 
   return (

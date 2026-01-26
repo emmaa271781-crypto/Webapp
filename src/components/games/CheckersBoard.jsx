@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import './CheckersBoard.css';
 
-export function CheckersBoard({ G, ctx, moves, events }) {
-  const playerID = ctx.playerID || '0';
+export function CheckersBoard({ G, ctx, moves, events, playerID }) {
+  const currentPlayerID = playerID || ctx.playerID || '0';
   const [selectedCell, setSelectedCell] = useState(null);
 
   const onClick = (id) => {
@@ -40,7 +40,7 @@ export function CheckersBoard({ G, ctx, moves, events }) {
         key={id}
         className={`checkers-cell ${isDark ? 'dark' : 'light'} ${isSelected ? 'selected' : ''}`}
         onClick={() => onClick(id)}
-        disabled={ctx.currentPlayer !== playerID}
+        disabled={ctx.currentPlayer !== currentPlayerID}
       >
         {pieceSymbol && <span className="checkers-piece">{pieceSymbol}</span>}
       </button>

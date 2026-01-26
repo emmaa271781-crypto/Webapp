@@ -4,10 +4,10 @@ import './ConnectFourBoard.css';
 const ROWS = 6;
 const COLS = 7;
 
-export function ConnectFourBoard({ G, ctx, moves, events }) {
-  const playerID = ctx.playerID || '0';
+export function ConnectFourBoard({ G, ctx, moves, events, playerID }) {
+  const currentPlayerID = playerID || ctx.playerID || '0';
   const onClick = (col) => {
-    if (ctx.currentPlayer === playerID) {
+    if (ctx.currentPlayer === currentPlayerID) {
       moves.dropToken(col);
     }
   };
@@ -29,12 +29,12 @@ export function ConnectFourBoard({ G, ctx, moves, events }) {
   let status = '';
   if (ctx.gameover) {
     if (ctx.gameover.winner !== undefined) {
-      status = `Winner: Player ${ctx.gameover.winner === playerID ? 'You' : 'Opponent'}`;
+      status = `Winner: Player ${ctx.gameover.winner === currentPlayerID ? 'You' : 'Opponent'}`;
     } else {
       status = 'Draw!';
     }
   } else {
-    status = ctx.currentPlayer === playerID ? 'Your turn - Click a column' : "Opponent's turn";
+    status = ctx.currentPlayer === currentPlayerID ? 'Your turn - Click a column' : "Opponent's turn";
   }
 
   return (
@@ -46,7 +46,7 @@ export function ConnectFourBoard({ G, ctx, moves, events }) {
             key={col}
             className="connectfour-column-btn"
             onClick={() => onClick(col)}
-            disabled={ctx.currentPlayer !== playerID}
+            disabled={ctx.currentPlayer !== currentPlayerID}
           >
             ↓
           </button>
