@@ -106,16 +106,42 @@
   color: var(--text-muted) !important;
 }
 
-/* Override any white backgrounds */
-.cs-main-container *,
-.cs-chat-container * {
-  background-color: transparent !important;
+/* Message bubbles */
+.cs-message__content {
+  background: var(--bg-message) !important;
+  background-color: var(--bg-message) !important;
+  color: var(--text-primary) !important;
+  border-radius: var(--radius-md) !important;
 }
 
+.cs-message--outgoing .cs-message__content {
+  background: var(--bg-message-self) !important;
+  background-color: var(--bg-message-self) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message__content-wrapper {
+  background: transparent !important;
+}
+
+/* Message sender name and time */
+.cs-message__sender,
+.cs-message__time {
+  color: var(--text-secondary) !important;
+}
+
+/* Override any white backgrounds - be more specific */
 .cs-main-container,
 .cs-chat-container,
 .cs-message-list,
-.cs-message-list-content {
+.cs-message-list-content,
+.cs-message-list__scroll-wrapper {
   background: var(--bg-primary) !important;
   background-color: var(--bg-primary) !important;
+}
+
+/* Ensure no white backgrounds leak through */
+.cs-main-container > *,
+.cs-chat-container > * {
+  background-color: transparent !important;
 }
