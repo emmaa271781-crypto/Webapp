@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import './ChessBoard.css';
 
-export function ChessBoard({ G, ctx, moves, events, playerID }) {
+export function ChessBoard({ G, ctx, moves, events }) {
+  const playerID = ctx.playerID || '0';
   const [selectedCell, setSelectedCell] = useState(null);
 
   const onClick = (id) => {

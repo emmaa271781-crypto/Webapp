@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import './CheckersBoard.css';
 
-export function CheckersBoard({ G, ctx, moves, events, playerID }) {
+export function CheckersBoard({ G, ctx, moves, events }) {
+  const playerID = ctx.playerID || '0';
   const [selectedCell, setSelectedCell] = useState(null);
 
   const onClick = (id) => {

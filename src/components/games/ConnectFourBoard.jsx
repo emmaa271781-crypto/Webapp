@@ -4,7 +4,8 @@ import './ConnectFourBoard.css';
 const ROWS = 6;
 const COLS = 7;
 
-export function ConnectFourBoard({ G, ctx, moves, events, playerID }) {
+export function ConnectFourBoard({ G, ctx, moves, events }) {
+  const playerID = ctx.playerID || '0';
   const onClick = (col) => {
     if (ctx.currentPlayer === playerID) {
       moves.dropToken(col);

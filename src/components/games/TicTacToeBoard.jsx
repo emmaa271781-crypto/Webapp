@@ -1,7 +1,8 @@
 import React from 'react';
 import './TicTacToeBoard.css';
 
-export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
+export function TicTacToeBoard({ G, ctx, moves, events }) {
+  const playerID = ctx.playerID || '0';
   const onClick = (id) => {
     if (G.cells[id] === null && ctx.currentPlayer === playerID) {
       moves.clickCell(id);
