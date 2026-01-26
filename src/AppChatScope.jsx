@@ -27,6 +27,8 @@ import MessageActions from './components/MessageActions';
 import './App.css';
 
 function AppChatScope() {
+  console.log('[AppChatScope] Component rendering...');
+  
   const [currentUser, setCurrentUser] = useState('');
   const [currentAvatar, setCurrentAvatar] = useState('');
   const [showJoin, setShowJoin] = useState(true);
@@ -36,23 +38,59 @@ function AppChatScope() {
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   
-  const socket = useSocket();
-  const { messages, addMessage, updateMessage, updateReactions } = useMessages();
-  const { users, total, typingUsers } = usePresence(socket);
-  const {
-    isInCall,
-    callRole,
-    remotePeerId,
-    callConnected,
-    remoteProfile,
-    showCallPanel,
-    showCallBanner,
-    callBannerText,
-    startCall,
-    endCall,
-    joinCall,
-    dismissBanner,
-  } = useCall(socket, currentUser);
+  let socket, messages, addMessage, updateMessage, updateReactions, users, total, typingUsers;
+  let isInCall, callRole, remotePeerId, callConnected, remoteProfile, showCallPanel, showCallBanner, callBannerText, startCall, endCall, joinCall, dismissBanner;
+  
+  try {
+    socket = useSocket();
+    const messagesHook = useMessages();
+    messages = messagesHook.messages;
+    addMessage = messagesHook.addMessage;
+    updateMessage = messagesHook.updateMessage;
+    updateReactions = messagesHook.updateReactions;
+    
+    const presenceHook = usePresence(socket);
+    users = presenceHook.users;
+    total = presenceHook.total;
+    typingUsers = presenceHook.typingUsers;
+    
+    const callHook = useCall(socket, currentUser);
+    isInCall = callHook.isInCall;
+    callRole = callHook.callRole;
+    remotePeerId = callHook.remotePeerId;
+    callConnected = callHook.callConnected;
+    remoteProfile = callHook.remoteProfile;
+    showCallPanel = callHook.showCallPanel;
+    showCallBanner = callHook.showCallBanner;
+    callBannerText = callHook.callBannerText;
+    startCall = callHook.startCall;
+    endCall = callHook.endCall;
+    joinCall = callHook.joinCall;
+    dismissBanner = callHook.dismissBanner;
+  } catch (error) {
+    console.error('[AppChatScope] Error initializing hooks:', error);
+    // Provide defaults to prevent crash
+    socket = null;
+    messages = [];
+    addMessage = () => {};
+    updateMessage = () => {};
+    updateReactions = () => {};
+    users = [];
+    total = 0;
+    typingUsers = [];
+    isInCall = false;
+    callRole = null;
+    remotePeerId = null;
+    callConnected = false;
+    remoteProfile = { name: 'Remote', avatar: '' };
+    showCallPanel = false;
+    showCallBanner = false;
+    callBannerText = '';
+    startCall = () => {};
+    endCall = () => {};
+    joinCall = () => {};
+    dismissBanner = () => {};
+  }
 
   useEffect(() => {
     if (!socket) return;
@@ -133,7 +171,10 @@ function AppChatScope() {
     });
   };
 
+  console.log('[AppChatScope] showJoin:', showJoin, 'currentUser:', currentUser);
+  
   if (showJoin || !currentUser) {
+    console.log('[AppChatScope] Rendering JoinOverlay');
     return (
       <AnimatePresence>
         <JoinOverlay onJoin={handleJoin} initialAvatar={currentAvatar} />
