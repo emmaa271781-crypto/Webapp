@@ -15,8 +15,9 @@ oldFiles.forEach(file => {
 });
 
 // Copy service worker to public directory after build
-const swSource = path.join(__dirname, 'public', 'sw.js');
-const swDest = path.join(__dirname, 'public', 'sw.js');
+// __dirname is scripts/, so go up one level to get project root
+const projectRoot = path.join(__dirname, '..');
+const swDest = path.join(projectRoot, 'public', 'sw.js');
 
 // Only copy if source exists and is different
 if (fs.existsSync(swSource)) {
