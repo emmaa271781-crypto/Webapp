@@ -56,10 +56,10 @@
 }
 
 .user-item.self {
-  color: #93c5fd;
+  color: #4ade80;
   font-weight: 600;
-  background: rgba(147, 197, 253, 0.1);
-  border-left: 2px solid #93c5fd;
+  background: rgba(74, 222, 128, 0.1);
+  border-left: 2px solid #4ade80;
 }
 
 .user-badge {
