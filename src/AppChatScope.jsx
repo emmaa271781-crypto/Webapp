@@ -280,48 +280,44 @@ function AppChatScope() {
                 messageContent = msg.file.kind === 'image' ? '[Image]' : '[Video]';
               }
 
+              // Build full message text with reply context
+              let fullMessageContent = messageContent;
+              if (msg.replyTo) {
+                fullMessageContent = `↩ ${msg.replyTo.user}: ${msg.replyTo.text?.slice(0, 30) || '(deleted)'}\n${messageContent}`;
+              }
+
               return (
                 <div key={msg.id} style={{ position: 'relative', marginBottom: '0.5rem' }}>
                   <Message
                     model={{
-                      message: messageContent,
+                      message: fullMessageContent,
                       sentTime: new Date(msg.timestamp).toLocaleTimeString(),
                       sender: msg.user,
                       direction: msg.user === currentUser ? 'outgoing' : 'incoming',
                     }}
-                  >
-                    {msg.replyTo && (
-                      <div style={{ 
-                        marginBottom: '8px', 
-                        padding: '8px', 
-                        background: 'rgba(74, 222, 128, 0.1)', 
-                        borderRadius: '4px',
-                        borderLeft: '3px solid #4ade80',
-                        fontSize: '0.85rem'
-                      }}>
-                        <div style={{ color: '#a8d5ba', fontWeight: 600, marginBottom: '4px' }}>
-                          {msg.replyTo.user}
-                        </div>
-                        <div style={{ color: '#7fb3a0' }}>
-                          {msg.replyTo.text?.slice(0, 50) || '(message deleted)'}
-                        </div>
-                      </div>
-                    )}
-                    {msg.file && (
-                      <div style={{ marginTop: '8px' }}>
-                        {msg.file.kind === 'image' ? (
-                          <img src={msg.file.url} alt={msg.file.name} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
-                        ) : (
-                          <video src={msg.file.url} controls style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
-                        )}
-                      </div>
-                    )}
-                    {reactionButtons.length > 0 && (
-                      <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                        {reactionButtons}
-                      </div>
-                    )}
-                  </Message>
+                  />
+                  {msg.file && (
+                    <div style={{ marginTop: '4px', marginLeft: msg.user === currentUser ? 'auto' : '0', marginRight: msg.user === currentUser ? '0' : 'auto', maxWidth: '300px' }}>
+                      {msg.file.kind === 'image' ? (
+                        <img src={msg.file.url} alt={msg.file.name} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
+                      ) : (
+                        <video src={msg.file.url} controls style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
+                      )}
+                    </div>
+                  )}
+                  {reactionButtons.length > 0 && (
+                    <div style={{ 
+                      marginTop: '4px', 
+                      display: 'flex', 
+                      flexWrap: 'wrap', 
+                      gap: '4px',
+                      marginLeft: msg.user === currentUser ? 'auto' : '0',
+                      marginRight: msg.user === currentUser ? '0' : 'auto',
+                      justifyContent: msg.user === currentUser ? 'flex-end' : 'flex-start'
+                    }}>
+                      {reactionButtons}
+                    </div>
+                  )}
                   <div style={{ 
                     position: 'absolute',
                     top: '4px',
