@@ -1,13 +1,14 @@
 .sidebar {
-  width: 220px;
-  background: var(--bg-secondary);
+  width: 240px;
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, rgba(19, 23, 34, 0.95) 100%);
   border-right: 1px solid var(--border-color);
-  padding: 1rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.25rem;
   overflow-y: auto;
   flex-shrink: 0;
+  backdrop-filter: blur(20px);
 }
 
 .sidebar-section {

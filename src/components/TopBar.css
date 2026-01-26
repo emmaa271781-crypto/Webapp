@@ -3,11 +3,13 @@
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
-  padding: 1rem 1.5rem;
-  background: var(--bg-tertiary);
+  padding: 1rem 2rem;
+  background: linear-gradient(180deg, var(--bg-tertiary) 0%, rgba(23, 26, 35, 0.95) 100%);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   z-index: 100;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .top-bar h1 {

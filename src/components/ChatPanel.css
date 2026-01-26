@@ -10,8 +10,9 @@
 .chat-messages {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding-bottom: 1rem;
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  padding-top: 0.5rem;
 }
 
 .scroll-latest {
