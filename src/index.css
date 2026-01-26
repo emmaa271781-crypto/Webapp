@@ -5,22 +5,22 @@
 }
 
 :root {
-  --bg-primary: #0f111a;
-  --bg-secondary: #131722;
-  --bg-tertiary: #171a23;
-  --bg-message: #1a1f2e;
-  --bg-message-self: #2b3250;
-  --bg-input: #0f1422;
-  --border-color: #23283a;
-  --border-light: #2a334a;
-  --text-primary: #e5e7eb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --accent: #5865f2;
-  --accent-hover: #4752c4;
+  --bg-primary: #0a1418;
+  --bg-secondary: #0f1d22;
+  --bg-tertiary: #13252c;
+  --bg-message: #1a2e35;
+  --bg-message-self: #2d4a55;
+  --bg-input: #0d1a1f;
+  --border-color: #1e3a42;
+  --border-light: #254a54;
+  --text-primary: #e8f5e9;
+  --text-secondary: #a8d5ba;
+  --text-muted: #7fb3a0;
+  --accent: #4ade80;
+  --accent-hover: #34d399;
   --success: #22c55e;
-  --error: #ef4444;
-  --warning: #f59e0b;
+  --error: #f87171;
+  --warning: #fbbf24;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.35);
@@ -33,7 +33,7 @@
 
 body {
   font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  background: linear-gradient(135deg, var(--bg-primary) 0%, #0a0d14 100%);
+  background: linear-gradient(135deg, var(--bg-primary) 0%, #081013 100%);
   color: var(--text-primary);
   min-height: 100vh;
   height: 100vh;
@@ -51,8 +51,9 @@ body::before {
   right: 0;
   bottom: 0;
   background: 
-    radial-gradient(circle at 20% 50%, rgba(88, 101, 242, 0.1) 0%, transparent 50%),
-    radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.1) 0%, transparent 50%);
+    radial-gradient(circle at 20% 50%, rgba(74, 222, 128, 0.12) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(52, 211, 153, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 50% 20%, rgba(16, 185, 129, 0.08) 0%, transparent 50%);
   pointer-events: none;
   z-index: 0;
 }
@@ -90,5 +91,5 @@ body::before {
 /* Selection */
 ::selection {
   background: var(--accent);
-  color: white;
+  color: #0a1418;
 }

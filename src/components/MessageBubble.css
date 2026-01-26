@@ -10,9 +10,9 @@
 }
 
 .message-bubble.own {
-  background: linear-gradient(135deg, var(--bg-message-self) 0%, #2d3658 100%);
-  border-color: #3b4470;
-  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.15);
+  background: linear-gradient(135deg, var(--bg-message-self) 0%, #1e3a42 100%);
+  border-color: #254a54;
+  box-shadow: 0 4px 12px rgba(74, 222, 128, 0.15);
 }
 
 .message-bubble.deleted {
@@ -22,7 +22,7 @@
 
 .message-bubble:hover {
   border-color: var(--accent);
-  box-shadow: 0 4px 16px rgba(88, 101, 242, 0.2);
+  box-shadow: 0 4px 16px rgba(74, 222, 128, 0.2);
   transform: translateY(-1px);
 }
 
