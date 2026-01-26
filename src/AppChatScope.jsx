@@ -181,6 +181,10 @@ function AppChatScope() {
     }
   }
 
+  const typingIndicator = typingUsers.length > 0 ? (
+    <TypingIndicator content={`${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing`} />
+  ) : null;
+
   return (
     <div className="app" style={{ height: '100vh' }}>
       <AnimatePresence>
@@ -191,13 +195,6 @@ function AppChatScope() {
           />
         )}
       </AnimatePresence>
-
-  const typingIndicator = typingUsers.length > 0 ? (
-    <TypingIndicator content={`${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing`} />
-  ) : null;
-
-  return (
-    <div className="app" style={{ height: '100vh' }}>
       <AnimatePresence>
         {showProfileOverlay && (
           <ProfileOverlay
