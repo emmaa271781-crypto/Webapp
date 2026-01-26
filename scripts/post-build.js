@@ -2,21 +2,22 @@ const fs = require('fs');
 const path = require('path');
 
 // Remove old files that might interfere
-const publicDir = path.join(__dirname, 'public');
-const oldFiles = ['app.js', 'style.css', 'index.html'];
+// __dirname is scripts/, so go up one level to get project root
+const projectRoot = path.join(__dirname, '..');
+const publicDir = path.join(projectRoot, 'public');
+const oldFiles = ['app.js', 'style.css'];
 
 console.log('🧹 Cleaning up old files...');
 oldFiles.forEach(file => {
   const filePath = path.join(publicDir, file);
-  if (fs.existsSync(filePath) && file !== 'index.html') {
+  if (fs.existsSync(filePath)) {
     console.log(`   Removing old ${file}...`);
     fs.unlinkSync(filePath);
   }
 });
 
 // Copy service worker to public directory after build
-// __dirname is scripts/, so go up one level to get project root
-const projectRoot = path.join(__dirname, '..');
+const swSource = path.join(projectRoot, 'public', 'sw.js');
 const swDest = path.join(projectRoot, 'public', 'sw.js');
 
 // Only copy if source exists and is different
