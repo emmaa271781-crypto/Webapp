@@ -1,6 +1,19 @@
 const fs = require('fs');
 const path = require('path');
 
+// Remove old files that might interfere
+const publicDir = path.join(__dirname, 'public');
+const oldFiles = ['app.js', 'style.css', 'index.html'];
+
+console.log('🧹 Cleaning up old files...');
+oldFiles.forEach(file => {
+  const filePath = path.join(publicDir, file);
+  if (fs.existsSync(filePath) && file !== 'index.html') {
+    console.log(`   Removing old ${file}...`);
+    fs.unlinkSync(filePath);
+  }
+});
+
 // Copy service worker to public directory after build
 const swSource = path.join(__dirname, 'public', 'sw.js');
 const swDest = path.join(__dirname, 'public', 'sw.js');
