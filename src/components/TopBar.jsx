@@ -22,13 +22,31 @@ function TopBar({
     >
       <h1>Classroom CS</h1>
       <div className="header-actions">
+      <motion.span
+        className="status-pill status-ok"
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ 
+          type: "spring",
+          stiffness: 400,
+          damping: 20
+        }}
+      >
         <motion.span
-          className="status-pill status-ok"
-          initial={{ scale: 0.9 }}
-          animate={{ scale: 1 }}
+          animate={{ 
+            scale: [1, 1.2, 1],
+          }}
+          transition={{ 
+            duration: 2,
+            repeat: Infinity,
+            repeatDelay: 3
+          }}
+          style={{ display: 'inline-block', marginRight: '0.3rem' }}
         >
-          Connected
+          ●
         </motion.span>
+        Connected
+      </motion.span>
         {!isInCall ? (
           <motion.button
             className="call-button"

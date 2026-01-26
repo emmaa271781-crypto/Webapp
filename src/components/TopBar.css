@@ -27,12 +27,14 @@
 .status-pill {
   display: inline-flex;
   align-items: center;
-  padding: 0.3rem 0.7rem;
+  padding: 0.4rem 0.8rem;
   border-radius: var(--radius-full);
-  background: #123225;
+  background: linear-gradient(135deg, #123225 0%, #0d2419 100%);
   color: #6ee7b7;
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(110, 231, 183, 0.2);
+  border: 1px solid rgba(110, 231, 183, 0.2);
 }
 
 .header-button {

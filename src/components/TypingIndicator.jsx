@@ -16,15 +16,27 @@ function TypingIndicator({ users, currentUser }) {
     <AnimatePresence>
       <motion.div
         className="typing-indicator"
-        initial={{ opacity: 0, y: -5 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -5 }}
-        transition={{ duration: 0.2 }}
+        initial={{ opacity: 0, y: -10, scale: 0.9 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -10, scale: 0.9 }}
+        transition={{ 
+          duration: 0.3,
+          ease: [0.34, 1.56, 0.64, 1]
+        }}
       >
         <span className="typing-dots">
-          <span></span>
-          <span></span>
-          <span></span>
+          <motion.span
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+          />
+          <motion.span
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+          />
+          <motion.span
+            animate={{ y: [0, -4, 0] }}
+            transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
+          />
         </span>
         {text}
       </motion.div>

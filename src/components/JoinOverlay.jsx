@@ -39,9 +39,16 @@ function JoinOverlay({ onJoin, initialAvatar = '' }) {
       <motion.form
         className="join-card"
         onSubmit={handleSubmit}
-        initial={{ scale: 0.96, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.16 }}
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        transition={{ 
+          duration: 0.4,
+          ease: [0.34, 1.56, 0.64, 1],
+          type: "spring",
+          stiffness: 300,
+          damping: 25
+        }}
       >
         <h2>Join the room</h2>
         <p>Enter your name and the class password.</p>

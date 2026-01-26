@@ -165,10 +165,15 @@ function MessageComposer({ currentUser, socket }) {
           />
           <motion.button
             type="submit"
-            whileHover={{ scale: 1.05 }}
+            whileHover={{ scale: 1.05, y: -1 }}
             whileTap={{ scale: 0.95 }}
+            transition={{ type: "spring", stiffness: 400, damping: 17 }}
           >
-            Send
+            <motion.span
+              animate={text.trim() ? {} : {}}
+            >
+              Send
+            </motion.span>
           </motion.button>
         </div>
 

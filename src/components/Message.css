@@ -1,9 +1,9 @@
 .message {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  max-width: 70%;
-  animation: messageSlideIn 0.3s ease;
+  gap: 0.5rem;
+  max-width: 75%;
+  position: relative;
 }
 
 .message.self {
@@ -12,25 +12,15 @@
 
 .message.system {
   align-self: center;
-  background: #141924;
+  background: linear-gradient(135deg, #141924 0%, #0f1419 100%);
   border: 1px solid #20263a;
-  border-radius: var(--radius-sm);
-  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-full);
+  padding: 0.5rem 1rem;
   font-style: italic;
   color: var(--text-secondary);
   font-size: 0.85rem;
   max-width: 100%;
-}
-
-@keyframes messageSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
 @media (max-width: 720px) {

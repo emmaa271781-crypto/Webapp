@@ -11,15 +11,35 @@
 }
 
 .join-card {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: 2rem;
-  width: min(360px, 100%);
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, #1a1f2e 100%);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem;
+  width: min(400px, 100%);
   border: 1px solid var(--border-color);
-  box-shadow: var(--shadow-xl);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(88, 101, 242, 0.1);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1rem;
+  backdrop-filter: blur(20px);
+  position: relative;
+  overflow: hidden;
+}
+
+.join-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), #8b5cf6, var(--accent));
+  background-size: 200% 100%;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
 .join-card h2 {

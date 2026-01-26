@@ -20,13 +20,34 @@ function Sidebar({ users, total, currentUser }) {
             <motion.li
               key={user.name}
               className={`user-item ${user.name === currentUser ? 'self' : ''}`}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
+              initial={{ opacity: 0, x: -20, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: -20, scale: 0.9 }}
+              transition={{ 
+                delay: index * 0.03,
+                type: "spring",
+                stiffness: 300,
+                damping: 25
+              }}
+              whileHover={{ x: 4, transition: { duration: 0.2 } }}
             >
-              <span>{user.name}</span>
+              <motion.span
+                animate={user.name === currentUser ? {
+                  scale: [1, 1.05, 1],
+                } : {}}
+                transition={{ duration: 0.5, repeat: Infinity, repeatDelay: 2 }}
+              >
+                {user.name}
+              </motion.span>
               {user.count > 1 && (
-                <span className="user-badge">x{user.count}</span>
+                <motion.span 
+                  className="user-badge"
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ delay: index * 0.03 + 0.1 }}
+                >
+                  x{user.count}
+                </motion.span>
               )}
             </motion.li>
           ))}
