@@ -34,8 +34,19 @@ function CallPanel({
   useEffect(() => {
     // Ensure remote audio plays with browser compatibility
     if (remoteAudioRef.current && remoteStream) {
+      console.log('[CallPanel] Setting up remote audio playback');
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = 1.0;
       import('../utils/browserCompatibility').then(({ ensureAudioPlayback }) => {
-        ensureAudioPlayback(remoteAudioRef.current);
+        ensureAudioPlayback(remoteAudioRef.current).then(success => {
+          if (success) {
+            console.log('[CallPanel] Remote audio playback started');
+          } else {
+            console.warn('[CallPanel] Audio playback may require user interaction');
+          }
+        }).catch(err => {
+          console.error('[CallPanel] Audio playback error:', err);
+        });
       });
     }
   }, [remoteStream]);
@@ -136,6 +147,9 @@ function CallPanel({
               ref={remoteAudioRef}
               autoPlay
               playsInline
+              muted={false}
+              volume={1.0}
+              style={{ display: 'none' }}
             />
             <div 
               className="call-avatar"
