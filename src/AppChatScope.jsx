@@ -209,8 +209,8 @@ function AppChatScope() {
           </AnimatePresence>
 
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-            <MainContainer style={{ height: '100%', flex: 1 }}>
-              <ChatContainer>
+            <MainContainer style={{ height: '100%', flex: 1, background: 'var(--bg-primary)', backgroundColor: 'var(--bg-primary)' }}>
+              <ChatContainer style={{ background: 'var(--bg-primary)', backgroundColor: 'var(--bg-primary)' }}>
                 <ConversationHeader>
                   <ConversationHeader.Content userName="Private Chat Room">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
@@ -238,6 +238,7 @@ function AppChatScope() {
                 <MessageList
                   typingIndicator={typingIndicator}
                   scrollBehavior="smooth"
+                  style={{ background: 'var(--bg-primary)', backgroundColor: 'var(--bg-primary)' }}
                 >
                   {messages.map((msg) => {
               if (msg.deleted) {
