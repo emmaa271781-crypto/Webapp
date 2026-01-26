@@ -170,18 +170,31 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     });
 
     peer.on('signal', (signal) => {
+      console.log('[WebRTC] Generated signal, type:', signal.type || 'unknown', 'remotePeerId:', remotePeerId);
       if (remotePeerId && socket) {
+        console.log('[WebRTC] Sending signal to', remotePeerId);
         socket.emit('webrtc_signal', { signal, to: remotePeerId });
       } else {
+        console.log('[WebRTC] No remotePeerId yet, queuing signal');
         pendingSignalsRef.current.push(signal);
       }
     });
 
     peer.on('connect', () => {
-      console.log('[WebRTC] Peer connected');
+      console.log('[WebRTC] ✅ Peer connected successfully!');
       setConnectionState('connected');
       reconnectAttemptsRef.current = 0;
       startConnectionHealthCheck();
+      
+      // Ensure audio plays when connected
+      if (remoteAudioRef.current && remoteStreamRef.current) {
+        remoteAudioRef.current.srcObject = remoteStreamRef.current;
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.volume = 1.0;
+        ensureAudioPlayback(remoteAudioRef.current).catch(err => {
+          console.warn('[WebRTC] Audio playback on connect error:', err);
+        });
+      }
     });
 
     // Monitor ICE connection state (Discord-style verification)
@@ -231,23 +244,37 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     }
 
     peer.on('stream', (stream) => {
-      console.log('[WebRTC] Received remote stream');
+      console.log('[WebRTC] Received remote stream with', stream.getTracks().length, 'tracks');
       remoteStreamRef.current = stream;
       setRemoteStream(stream);
       
+      // Set video
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = stream;
+        console.log('[WebRTC] Set remote video stream');
       }
+      
+      // Set audio and ensure playback
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
-        ensureAudioPlayback(remoteAudioRef.current).catch(err => {
+        console.log('[WebRTC] Set remote audio stream');
+        // Force unmute and play
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.volume = 1.0;
+        ensureAudioPlayback(remoteAudioRef.current).then(success => {
+          if (success) {
+            console.log('[WebRTC] Audio playback started successfully');
+          } else {
+            console.warn('[WebRTC] Audio playback may require user interaction');
+          }
+        }).catch(err => {
           console.warn('[WebRTC] Audio playback error:', err);
         });
       }
     });
 
     peer.on('track', (track, stream) => {
-      console.log('[WebRTC] Received track:', track.kind);
+      console.log('[WebRTC] Received track:', track.kind, 'readyState:', track.readyState);
       if (!remoteStreamRef.current) {
         remoteStreamRef.current = new MediaStream();
         setRemoteStream(remoteStreamRef.current);
@@ -256,10 +283,20 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       
       if (track.kind === 'video' && remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStreamRef.current;
+        console.log('[WebRTC] Added video track to remote video element');
       }
       if (track.kind === 'audio' && remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStreamRef.current;
-        ensureAudioPlayback(remoteAudioRef.current).catch(err => {
+        remoteAudioRef.current.muted = false;
+        remoteAudioRef.current.volume = 1.0;
+        console.log('[WebRTC] Added audio track to remote audio element');
+        ensureAudioPlayback(remoteAudioRef.current).then(success => {
+          if (success) {
+            console.log('[WebRTC] Audio playback started from track');
+          } else {
+            console.warn('[WebRTC] Audio playback may require user interaction');
+          }
+        }).catch(err => {
           console.warn('[WebRTC] Audio playback error:', err);
         });
       }
@@ -531,29 +568,54 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   // Initialize peer when call starts
   useEffect(() => {
     if (isInCall && socket && remotePeerId) {
-      console.log('[WebRTC] Initializing peer connection');
+      console.log('[WebRTC] Call started - isInCall:', isInCall, 'remotePeerId:', remotePeerId, 'callRole:', callRole);
       setConnectionState('connecting');
+      
+      // Ensure SimplePeer is loaded
+      if (!window.SimplePeer) {
+        console.error('[WebRTC] SimplePeer not available!');
+        setConnectionState('error');
+        return;
+      }
+
+      // Destroy any existing peer first
+      if (peerRef.current) {
+        console.log('[WebRTC] Destroying existing peer before reinitializing');
+        destroyPeer();
+      }
       
       // Auto-enable microphone when call starts (but keep it muted initially)
       getLocalStream(true, false).then(() => {
+        console.log('[WebRTC] Local stream obtained, initializing peer');
         setIsMicMuted(true); // Start muted
         const peer = initPeer(callRole === 'caller');
         if (peer) {
-          flushPendingSignals();
+          console.log('[WebRTC] Peer initialized, flushing pending signals');
+          // Small delay to ensure peer is fully ready
+          setTimeout(() => {
+            flushPendingSignals();
+          }, 100);
+        } else {
+          console.error('[WebRTC] Failed to initialize peer');
         }
       }).catch(err => {
         console.error('[WebRTC] Failed to get local stream:', err);
         // Continue anyway - user can enable mic manually
+        console.log('[WebRTC] Initializing peer without local stream');
         const peer = initPeer(callRole === 'caller');
         if (peer) {
-          flushPendingSignals();
+          setTimeout(() => {
+            flushPendingSignals();
+          }, 100);
         }
       });
 
       return () => {
+        console.log('[WebRTC] Cleaning up peer connection');
         destroyPeer();
       };
     } else if (!isInCall) {
+      console.log('[WebRTC] Call ended, cleaning up');
       destroyPeer();
       stopLocalStream();
       setRemoteStream(null);
@@ -569,9 +631,26 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     if (!socket) return;
 
     const handleSignal = (payload) => {
-      if (!payload?.signal || !peerRef.current) return;
+      console.log('[WebRTC] Received signal:', payload);
+      if (!payload?.signal) {
+        console.warn('[WebRTC] Signal missing signal data:', payload);
+        return;
+      }
+      
+      // If peer doesn't exist yet, queue the signal
+      if (!peerRef.current) {
+        console.log('[WebRTC] Peer not ready, queuing signal');
+        pendingSignalsRef.current.push(payload.signal);
+        // Try to initialize peer if we have remotePeerId
+        if (remotePeerId && isInCall) {
+          console.log('[WebRTC] Initializing peer from signal handler');
+          initPeer(callRole === 'caller');
+        }
+        return;
+      }
       
       try {
+        console.log('[WebRTC] Processing signal with peer');
         peerRef.current.signal(payload.signal);
       } catch (err) {
         console.error('[WebRTC] Error processing signal:', err);
@@ -583,7 +662,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     return () => {
       socket.off('webrtc_signal', handleSignal);
     };
-  }, [socket]);
+  }, [socket, remotePeerId, isInCall, callRole, initPeer]);
 
   // Cleanup on unmount
   useEffect(() => {
