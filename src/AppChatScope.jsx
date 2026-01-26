@@ -340,6 +340,7 @@ function AppChatScope() {
           </MessageList>
             </ChatContainer>
           </MainContainer>
+          </div>
           <MessageComposer currentUser={currentUser} socket={socket} />
         </div>
       </div>
