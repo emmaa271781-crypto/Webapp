@@ -13,11 +13,14 @@ import { useSocket } from './hooks/useSocket';
 import { useMessages } from './hooks/useMessages';
 import { usePresence } from './hooks/usePresence';
 import JoinOverlay from './components/JoinOverlay';
+import GameCanvas from './components/GameCanvas';
 import './App.css';
 
 function AppChatScope() {
   const [currentUser, setCurrentUser] = useState(null);
   const [showJoin, setShowJoin] = useState(true);
+  const [showGame, setShowGame] = useState(false);
+  const [gameType, setGameType] = useState('pong');
   const socket = useSocket();
   const { messages, addMessage, updateMessage, updateReactions } = useMessages();
   const { users, total, typingUsers } = usePresence(socket);
@@ -96,6 +99,10 @@ function AppChatScope() {
     return <JoinOverlay onJoin={handleJoin} />;
   }
 
+  if (showGame) {
+    return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} />;
+  }
+
   const typingIndicator = typingUsers.length > 0 ? (
     <TypingIndicator content={`${typingUsers.join(', ')} ${typingUsers.length === 1 ? 'is' : 'are'} typing`} />
   ) : null;
@@ -110,6 +117,21 @@ function AppChatScope() {
                 Private Chat Room
               </ConversationHeader.Info>
               <ConversationHeader.Actions>
+                <button
+                  onClick={() => setShowGame(true)}
+                  style={{
+                    padding: '0.4rem 0.8rem',
+                    marginRight: '0.5rem',
+                    borderRadius: '0.4rem',
+                    border: '1px solid #4ade80',
+                    background: 'transparent',
+                    color: '#4ade80',
+                    cursor: 'pointer',
+                    fontSize: '0.8rem',
+                  }}
+                >
+                  🎮 Play Game
+                </button>
                 <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>
                   {total} online
                 </span>

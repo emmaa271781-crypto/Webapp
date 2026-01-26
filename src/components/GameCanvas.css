@@ -1,0 +1,43 @@
+.game-canvas-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(10, 20, 24, 0.95);
+  backdrop-filter: blur(10px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 2rem;
+}
+
+.game-canvas {
+  background: #0a1418;
+  border: 2px solid #4ade80;
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(74, 222, 128, 0.3);
+}
+
+.game-controls {
+  margin-top: 1rem;
+}
+
+.game-close-btn {
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--error);
+  background: var(--error);
+  color: white;
+  cursor: pointer;
+  font-size: 0.95rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.game-close-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+}
