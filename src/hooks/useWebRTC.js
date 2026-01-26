@@ -234,17 +234,31 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         if (!localStreamRef.current) {
           await getLocalStream(true, isCameraEnabled);
         } else {
-          const stream = await getLocalStream(true, false);
-          const audioTrack = stream.getAudioTracks()[0];
-          if (audioTrack && peerRef.current) {
-            const existingTrack = localStreamRef.current?.getAudioTracks()[0];
-            if (existingTrack && peerRef.current.replaceTrack) {
-              peerRef.current.replaceTrack(existingTrack, audioTrack, localStreamRef.current);
-            } else {
-              peerRef.current.addTrack(audioTrack, localStreamRef.current);
-            }
-            if (callRole !== 'caller' && peerRef.current.negotiate) {
-              peerRef.current.negotiate();
+          const audioTrack = localStreamRef.current.getAudioTracks()[0];
+          if (audioTrack) {
+            // Re-enable existing track
+            audioTrack.enabled = true;
+          } else {
+            // Get new audio stream
+            const stream = await getLocalStream(true, false);
+            const newAudioTrack = stream.getAudioTracks()[0];
+            if (newAudioTrack && peerRef.current) {
+              const existingTrack = localStreamRef.current?.getAudioTracks()[0];
+              if (existingTrack && peerRef.current.replaceTrack) {
+                peerRef.current.replaceTrack(existingTrack, newAudioTrack, localStreamRef.current);
+              } else {
+                localStreamRef.current.addTrack(newAudioTrack);
+                peerRef.current.addTrack(newAudioTrack, localStreamRef.current);
+              }
+              if (callRole !== 'caller' && peerRef.current.negotiate) {
+                setTimeout(() => {
+                  try {
+                    peerRef.current.negotiate();
+                  } catch (err) {
+                    console.warn('[WebRTC] Negotiate error:', err);
+                  }
+                }, 100);
+              }
             }
           }
         }
@@ -254,7 +268,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         alert('Failed to enable microphone. Please check permissions.');
       }
     } else {
-      // Disable mic
+      // Disable mic (mute)
       if (localStreamRef.current) {
         localStreamRef.current.getAudioTracks().forEach(track => {
           track.enabled = false;
@@ -378,11 +392,22 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     if (isInCall && socket && remotePeerId) {
       console.log('[WebRTC] Initializing peer connection');
       setConnectionState('connecting');
-      const peer = initPeer(callRole === 'caller');
       
-      if (peer) {
-        flushPendingSignals();
-      }
+      // Auto-enable microphone when call starts (but keep it muted initially)
+      getLocalStream(true, false).then(() => {
+        setIsMicMuted(true); // Start muted
+        const peer = initPeer(callRole === 'caller');
+        if (peer) {
+          flushPendingSignals();
+        }
+      }).catch(err => {
+        console.error('[WebRTC] Failed to get local stream:', err);
+        // Continue anyway - user can enable mic manually
+        const peer = initPeer(callRole === 'caller');
+        if (peer) {
+          flushPendingSignals();
+        }
+      });
 
       return () => {
         destroyPeer();
@@ -392,8 +417,11 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       stopLocalStream();
       setRemoteStream(null);
       setConnectionState('disconnected');
+      setIsMicMuted(true);
+      setIsCameraEnabled(false);
+      setIsScreenSharing(false);
     }
-  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream]);
+  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream, getLocalStream]);
 
   // Handle WebRTC signals from server
   useEffect(() => {
