@@ -266,18 +266,24 @@ function AppChatScope() {
                     background: users.includes(currentUser) ? '#4ade80' : 'transparent',
                     color: users.includes(currentUser) ? '#0a1418' : '#4ade80',
                     cursor: 'pointer',
+                    fontSize: '0.85rem',
                   }}
                 >
                   {emoji} {users.length}
                 </button>
               ));
 
-              // Use MessageBubble for better formatting with replies, files, etc.
+              // Build message content with replies, files, etc.
+              let messageContent = msg.text || '';
+              if (msg.file) {
+                messageContent = msg.file.kind === 'image' ? '[Image]' : '[Video]';
+              }
+
               return (
-                <div key={msg.id} style={{ marginBottom: '0.5rem' }}>
+                <div key={msg.id} style={{ position: 'relative', marginBottom: '0.5rem' }}>
                   <Message
                     model={{
-                      message: msg.text || (msg.file ? `[${msg.file.kind}]` : ''),
+                      message: messageContent,
                       sentTime: new Date(msg.timestamp).toLocaleTimeString(),
                       sender: msg.user,
                       direction: msg.user === currentUser ? 'outgoing' : 'incoming',
@@ -316,13 +322,14 @@ function AppChatScope() {
                     )}
                   </Message>
                   <div style={{ 
-                    display: 'flex', 
-                    justifyContent: msg.user === currentUser ? 'flex-end' : 'flex-start',
-                    marginTop: '4px',
+                    position: 'absolute',
+                    top: '4px',
+                    right: msg.user === currentUser ? '4px' : 'auto',
+                    left: msg.user !== currentUser ? '4px' : 'auto',
                     opacity: 0,
-                    transition: 'opacity 0.2s'
+                    transition: 'opacity 0.2s',
+                    zIndex: 10
                   }} 
-                  className="message-actions-wrapper"
                   onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
                   onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
                     <MessageActions message={msg} currentUser={currentUser} socket={socket} />
@@ -330,7 +337,7 @@ function AppChatScope() {
                 </div>
               );
             })}
-              </MessageList>
+          </MessageList>
             </ChatContainer>
           </MainContainer>
           <MessageComposer currentUser={currentUser} socket={socket} />
