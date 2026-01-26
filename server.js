@@ -749,10 +749,12 @@ io.on("connection", (socket) => {
 });
 
 // Fallback to index.html for React app (must be after all API routes)
-app.get("*", (req, res) => {
+app.use((req, res, next) => {
   // Only serve index.html for non-API routes
-  if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io")) {
+  if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io") && !req.path.startsWith("/assets")) {
     res.sendFile(path.join(__dirname, "public", "index.html"));
+  } else {
+    next();
   }
 });
 
