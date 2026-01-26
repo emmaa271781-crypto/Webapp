@@ -33,15 +33,10 @@
     "react-dom": "^18.2.0",
     "framer-motion": "^10.16.16",
     "socket.io-client": "^4.8.3",
-    "@chatscope/chat-ui-kit-react": "^2.1.1",
-    "@chatscope/chat-ui-kit-styles": "^2.1.1",
-    "@lucia-auth/adapter-prisma": "^3.0.0",
-    "lucia": "^3.0.0",
-    "@lucia-auth/adapter-sqlite": "^3.0.0",
+    "@chatscope/chat-ui-kit-react": "^1.4.0",
+    "@chatscope/chat-ui-kit-styles": "^1.4.0",
     "colyseus": "^0.15.0",
-    "phaser": "^3.80.1",
-    "bcryptjs": "^2.4.3",
-    "better-sqlite3": "^11.0.0"
+    "phaser": "^3.80.1"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
