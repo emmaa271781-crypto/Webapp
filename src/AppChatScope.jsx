@@ -5,10 +5,8 @@ import {
   ChatContainer,
   MessageList,
   Message,
-  MessageInput,
   TypingIndicator,
   ConversationHeader,
-  Avatar,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
 import { useSocket } from './hooks/useSocket';
@@ -214,11 +212,8 @@ function AppChatScope() {
             <MainContainer style={{ height: '100%', flex: 1 }}>
               <ChatContainer>
                 <ConversationHeader>
-                  <ConversationHeader.Content>
-                    <ConversationHeader.Info>
-                      Private Chat Room
-                    </ConversationHeader.Info>
-                    <ConversationHeader.Actions>
+                  <ConversationHeader.Content userName="Private Chat Room">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
                       <button
                         onClick={() => setShowGame(true)}
                         style={{
@@ -237,7 +232,7 @@ function AppChatScope() {
                       <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>
                         {total} online
                       </span>
-                    </ConversationHeader.Actions>
+                    </div>
                   </ConversationHeader.Content>
                 </ConversationHeader>
                 <MessageList
