@@ -37,7 +37,9 @@
     "@chatscope/chat-ui-kit-react": "^1.4.0",
     "@chatscope/chat-ui-kit-styles": "^1.4.0",
     "colyseus": "^0.15.0",
-    "phaser": "^3.80.1"
+    "phaser": "^3.80.1",
+    "boardgame.io": "^0.52.2",
+    "boardgame.io/react": "^0.52.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

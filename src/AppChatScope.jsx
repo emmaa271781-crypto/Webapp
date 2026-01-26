@@ -32,7 +32,9 @@ function AppChatScope() {
   const [showJoin, setShowJoin] = useState(true);
   const [showProfileOverlay, setShowProfileOverlay] = useState(false);
   const [showGame, setShowGame] = useState(false);
+  const [showGameSelector, setShowGameSelector] = useState(false);
   const [gameType, setGameType] = useState('pong');
+  const [boardgameType, setBoardgameType] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   
