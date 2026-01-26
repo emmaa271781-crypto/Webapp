@@ -7,12 +7,14 @@ export default defineConfig({
   root: './src',
   build: {
     outDir: '../public',
-    emptyOutDir: true,
+    emptyOutDir: true, // This should delete everything in public/ before building
     rollupOptions: {
       input: path.resolve(__dirname, 'src/index.html'),
     },
     // Copy service worker after build
     copyPublicDir: false,
+    // Ensure index.html is always generated
+    manifest: false,
   },
   publicDir: false, // Don't copy public dir contents
   server: {
