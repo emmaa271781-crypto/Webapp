@@ -224,6 +224,9 @@ function App() {
                 remoteProfile={remoteProfile}
                 callRole={callRole}
                 callConnected={callConnected}
+                remotePeerId={remotePeerId}
+                socket={socket}
+                isInCall={isInCall}
                 onEnd={endCall}
               />
             )}
