@@ -156,7 +156,9 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       }
       if (track.kind === 'audio' && remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStreamRef.current;
-        await ensureAudioPlayback(remoteAudioRef.current);
+        ensureAudioPlayback(remoteAudioRef.current).catch(err => {
+          console.warn('[WebRTC] Audio playback error:', err);
+        });
       }
     });
 
