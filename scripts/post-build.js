@@ -17,11 +17,10 @@ oldFiles.forEach(file => {
 });
 
 // Copy service worker to public directory after build
-const swSource = path.join(projectRoot, 'public', 'sw.js');
 const swDest = path.join(projectRoot, 'public', 'sw.js');
 
-// Only copy if source exists and is different
-if (fs.existsSync(swSource)) {
+// Check if service worker already exists (from old build or manually created)
+if (fs.existsSync(swDest)) {
   console.log('✅ Service worker preserved');
 } else {
   console.log('⚠️  Service worker not found, creating default...');
