@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 export function useMessages() {
   const [messages, setMessages] = useState([]);
@@ -15,21 +15,66 @@ export function useMessages() {
     });
   }, []);
 
-  const updateMessage = useCallback((message) => {
-    if (!message?.id) return;
+  const updateMessage = useCallback((messageOrId, text, deleted) => {
+    // Handle both signatures: updateMessage(message) or updateMessage(id, text, deleted)
+    let messageId;
+    let updatedMessage;
+    
+    if (typeof messageOrId === 'string' || typeof messageOrId === 'number') {
+      // Called as updateMessage(id, text, deleted)
+      messageId = messageOrId;
+      const existing = messagesById.current.get(messageId);
+      if (!existing) return;
+      
+      if (deleted) {
+        updatedMessage = { ...existing, deleted: true };
+      } else if (text !== undefined) {
+        updatedMessage = { ...existing, text, edited: true };
+      } else {
+        return;
+      }
+    } else {
+      // Called as updateMessage(message)
+      if (!messageOrId?.id) return;
+      messageId = messageOrId.id;
+      updatedMessage = messageOrId;
+    }
+    
     setMessages((prev) => {
-      const existing = messagesById.current.get(message.id);
-      if (!existing) return prev;
-      messagesById.current.set(message.id, message);
-      return prev.map((msg) => (msg.id === message.id ? message : msg));
+      messagesById.current.set(messageId, updatedMessage);
+      return prev.map((msg) => (msg.id === messageId ? updatedMessage : msg));
     });
   }, []);
 
-  const updateReactions = useCallback((messageId, reactions) => {
+  const updateReactions = useCallback((messageId, emoji, user, add) => {
+    // Handle both signatures: updateReactions(messageId, reactions) or updateReactions(messageId, emoji, user, add)
     setMessages((prev) => {
       const message = messagesById.current.get(messageId);
       if (!message) return prev;
-      const updated = { ...message, reactions: reactions || {} };
+      
+      let updated;
+      if (typeof emoji === 'string' && user !== undefined) {
+        // Called as updateReactions(messageId, emoji, user, add)
+        const reactions = { ...(message.reactions || {}) };
+        if (add) {
+          if (!reactions[emoji]) reactions[emoji] = [];
+          if (!reactions[emoji].includes(user)) {
+            reactions[emoji] = [...reactions[emoji], user];
+          }
+        } else {
+          if (reactions[emoji]) {
+            reactions[emoji] = reactions[emoji].filter(u => u !== user);
+            if (reactions[emoji].length === 0) {
+              delete reactions[emoji];
+            }
+          }
+        }
+        updated = { ...message, reactions };
+      } else {
+        // Called as updateReactions(messageId, reactions)
+        updated = { ...message, reactions: emoji || {} };
+      }
+      
       messagesById.current.set(messageId, updated);
       return prev.map((msg) => (msg.id === messageId ? updated : msg));
     });
