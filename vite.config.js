@@ -13,7 +13,10 @@ export default defineConfig({
         main: path.resolve(__dirname, 'src/index.html'),
       },
     },
+    // Copy service worker after build
+    copyPublicDir: false,
   },
+  publicDir: false, // Don't copy public dir contents
   server: {
     port: 5173,
     proxy: {
