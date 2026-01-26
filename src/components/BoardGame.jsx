@@ -140,70 +140,46 @@ const GAME_DEFINITIONS = {
 };
 
 function BoardGame({ gameType, playerID, onGameEnd, currentUser }) {
-  const [gameClient, setGameClient] = useState(null);
-  const [matchID, setMatchID] = useState(null);
+  const BoardComponent = GAME_BOARDS[gameType];
+  const gameDefinition = GAME_DEFINITIONS[gameType];
 
-  useEffect(() => {
-    if (!gameType || !playerID) return;
-
-    // Generate match ID
-    const newMatchID = `match_${gameType}_${Date.now()}`;
-    setMatchID(newMatchID);
-
-    const BoardComponent = GAME_BOARDS[gameType];
-    const gameDefinition = GAME_DEFINITIONS[gameType];
-
-    if (!BoardComponent || !gameDefinition) {
-      console.error(`[BoardGame] Game type ${gameType} not found`);
-      return;
-    }
-
-    // Create boardgame.io client
-    // Use local multiplayer for now (can be upgraded to server later)
-    const client = Client({
-      game: gameDefinition,
-      board: BoardComponent,
-      // For now, use local multiplayer - server integration can be added later
-      // multiplayer: SocketIO({
-      //   server: window.location.origin.replace(/^http/, 'ws'),
-      // }),
-      numPlayers: 2,
-    });
-
-    setGameClient(client);
-
-    return () => {
-      if (client) {
-        client.stop();
-      }
-    };
-  }, [gameType, playerID, currentUser]);
-
-  if (!gameClient || !matchID) {
+  if (!BoardComponent || !gameDefinition) {
     return (
       <div className="boardgame-container">
-        <div className="boardgame-loading">Loading game...</div>
+        <div className="boardgame-loading">Game type not found: {gameType}</div>
+        <button onClick={onGameEnd} className="boardgame-close-btn">
+          Close
+        </button>
       </div>
     );
   }
 
-  const BoardComponent = gameClient.Board;
+  // Create boardgame.io client with local multiplayer
+  // For true multiplayer, integrate with boardgame.io server
+  const App = Client({
+    game: gameDefinition,
+    board: BoardComponent,
+    numPlayers: 2,
+    debug: false,
+  });
+
+  const gameTitle = {
+    tictactoe: 'Tic-Tac-Toe',
+    checkers: 'Checkers',
+    connectfour: 'Connect Four',
+    chess: 'Chess',
+  }[gameType] || 'Game';
 
   return (
     <div className="boardgame-container">
       <div className="boardgame-header">
-        <div className="boardgame-title">
-          {gameType === 'tictactoe' && 'Tic-Tac-Toe'}
-          {gameType === 'checkers' && 'Checkers'}
-          {gameType === 'connectfour' && 'Connect Four'}
-          {gameType === 'chess' && 'Chess'}
-        </div>
+        <div className="boardgame-title">{gameTitle}</div>
         <button onClick={onGameEnd} className="boardgame-close-btn">
           Close Game
         </button>
       </div>
       <div className="boardgame-content">
-        <BoardComponent />
+        <App playerID={playerID || '0'} />
       </div>
     </div>
   );
