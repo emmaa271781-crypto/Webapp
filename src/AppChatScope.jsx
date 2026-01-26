@@ -32,7 +32,6 @@ function AppChatScope() {
   const [showJoin, setShowJoin] = useState(true);
   const [showProfileOverlay, setShowProfileOverlay] = useState(false);
   const [showGame, setShowGame] = useState(false);
-  const [gameType, setGameType] = useState('pong');
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   
@@ -146,7 +145,13 @@ function AppChatScope() {
   }
 
   if (showGame) {
-    return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} />;
+    return (
+      <GameCanvas
+        socket={socket}
+        currentUser={currentUser}
+        onGameEnd={() => setShowGame(false)}
+      />
+    );
   }
 
   const typingIndicator = typingUsers.length > 0 ? (

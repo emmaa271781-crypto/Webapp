@@ -42,6 +42,117 @@ const callState = {
   calleeId: null,
 };
 const callPeers = new Map();
+const GAME_ROOM = "game";
+const GAME_WIDTH = 800;
+const GAME_HEIGHT = 500;
+const GAME_PADDLE_HEIGHT = 90;
+const GAME_PADDLE_WIDTH = 14;
+const GAME_PADDLE_SPEED = 6;
+const GAME_BALL_RADIUS = 8;
+const GAME_BALL_SPEED = 240;
+const gameState = {
+  players: new Map(),
+  scores: { left: 0, right: 0 },
+  ball: { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, vx: GAME_BALL_SPEED, vy: GAME_BALL_SPEED * 0.7 },
+  lastTick: Date.now(),
+  active: false,
+};
+const gameInputs = new Map();
+let gameLoop = null;
+
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+const resetBall = (direction = 1) => {
+  const angle = (Math.random() * 0.6 - 0.3) * Math.PI;
+  gameState.ball.x = GAME_WIDTH / 2;
+  gameState.ball.y = GAME_HEIGHT / 2;
+  gameState.ball.vx = Math.cos(angle) * GAME_BALL_SPEED * direction;
+  gameState.ball.vy = Math.sin(angle) * GAME_BALL_SPEED;
+};
+
+const getGameSnapshot = () => ({
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
+  scores: gameState.scores,
+  ball: gameState.ball,
+  players: Array.from(gameState.players.values()),
+});
+
+const startGameLoop = () => {
+  if (gameLoop) {
+    return;
+  }
+  gameState.active = true;
+  gameState.lastTick = Date.now();
+  gameLoop = setInterval(() => {
+    const now = Date.now();
+    const delta = Math.min((now - gameState.lastTick) / 1000, 0.05);
+    gameState.lastTick = now;
+
+    const leftPlayer = Array.from(gameState.players.values()).find((player) => player.side === "left");
+    const rightPlayer = Array.from(gameState.players.values()).find((player) => player.side === "right");
+
+    for (const player of gameState.players.values()) {
+      const input = gameInputs.get(player.id) || 0;
+      if (input !== 0) {
+        player.y = clamp(
+          player.y + input * GAME_PADDLE_SPEED * (delta * 60),
+          GAME_PADDLE_HEIGHT / 2,
+          GAME_HEIGHT - GAME_PADDLE_HEIGHT / 2
+        );
+      }
+    }
+
+    const ball = gameState.ball;
+    ball.x += ball.vx * delta;
+    ball.y += ball.vy * delta;
+
+    if (ball.y - GAME_BALL_RADIUS <= 0 || ball.y + GAME_BALL_RADIUS >= GAME_HEIGHT) {
+      ball.vy *= -1;
+      ball.y = clamp(ball.y, GAME_BALL_RADIUS, GAME_HEIGHT - GAME_BALL_RADIUS);
+    }
+
+    if (leftPlayer) {
+      const leftX = 40;
+      const withinY =
+        ball.y >= leftPlayer.y - GAME_PADDLE_HEIGHT / 2 &&
+        ball.y <= leftPlayer.y + GAME_PADDLE_HEIGHT / 2;
+      if (ball.x - GAME_BALL_RADIUS <= leftX + GAME_PADDLE_WIDTH / 2 && withinY && ball.vx < 0) {
+        ball.vx = Math.abs(ball.vx) * 1.02;
+      }
+    }
+
+    if (rightPlayer) {
+      const rightX = GAME_WIDTH - 40;
+      const withinY =
+        ball.y >= rightPlayer.y - GAME_PADDLE_HEIGHT / 2 &&
+        ball.y <= rightPlayer.y + GAME_PADDLE_HEIGHT / 2;
+      if (ball.x + GAME_BALL_RADIUS >= rightX - GAME_PADDLE_WIDTH / 2 && withinY && ball.vx > 0) {
+        ball.vx = -Math.abs(ball.vx) * 1.02;
+      }
+    }
+
+    if (ball.x < -GAME_BALL_RADIUS) {
+      gameState.scores.right += 1;
+      resetBall(1);
+    } else if (ball.x > GAME_WIDTH + GAME_BALL_RADIUS) {
+      gameState.scores.left += 1;
+      resetBall(-1);
+    }
+
+    io.to(GAME_ROOM).emit("game_state", getGameSnapshot());
+  }, 33);
+};
+
+const stopGameLoop = () => {
+  if (gameLoop) {
+    clearInterval(gameLoop);
+    gameLoop = null;
+  }
+  gameState.active = false;
+  gameState.scores = { left: 0, right: 0 };
+  resetBall(1);
+};
 
 if (hasVapidKeys) {
   webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -385,6 +496,18 @@ const removeFromCall = (socketId) => {
   }
 };
 
+const removeFromGame = (socketId) => {
+  if (gameState.players.has(socketId)) {
+    gameState.players.delete(socketId);
+    gameInputs.delete(socketId);
+  }
+  if (gameState.players.size === 0) {
+    stopGameLoop();
+  } else {
+    io.to(GAME_ROOM).emit("game_state", getGameSnapshot());
+  }
+};
+
 const toggleReaction = (message, emoji, username) => {
   if (!message.reactions) {
     message.reactions = {};
@@ -446,6 +569,55 @@ io.on("connection", (socket) => {
     } else if (!previousName) {
       socket.broadcast.emit("system", `${username} joined the chat`);
     }
+  });
+
+  socket.on("game_join", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    const playerName = sanitizeName(payload?.name) || socket.data.username || "Player";
+    socket.join(GAME_ROOM);
+
+    const sides = new Set(Array.from(gameState.players.values()).map((player) => player.side));
+    let side = null;
+    if (!sides.has("left")) {
+      side = "left";
+    } else if (!sides.has("right")) {
+      side = "right";
+    }
+
+    gameState.players.set(socket.id, {
+      id: socket.id,
+      name: playerName,
+      side,
+      y: GAME_HEIGHT / 2,
+    });
+    gameInputs.set(socket.id, 0);
+
+    if (!gameState.active) {
+      startGameLoop();
+    }
+
+    const snapshot = getGameSnapshot();
+    socket.emit("game_joined", { side, state: snapshot });
+    io.to(GAME_ROOM).emit("game_state", snapshot);
+  });
+
+  socket.on("game_input", (payload) => {
+    if (!gameState.players.has(socket.id)) {
+      return;
+    }
+    const player = gameState.players.get(socket.id);
+    if (!player?.side) {
+      return;
+    }
+    const dir = clamp(Number(payload?.dir || 0), -1, 1);
+    gameInputs.set(socket.id, dir);
+  });
+
+  socket.on("game_leave", () => {
+    socket.leave(GAME_ROOM);
+    removeFromGame(socket.id);
   });
 
   socket.on("call_join", () => {
@@ -791,6 +963,7 @@ io.on("connection", (socket) => {
     typingUsers.delete(socket.id);
     emitPresence();
     emitTyping();
+    removeFromGame(socket.id);
     removeFromCall(socket.id);
   });
 });

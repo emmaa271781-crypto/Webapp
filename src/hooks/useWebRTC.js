@@ -20,9 +20,36 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const remoteStreamRef = useRef(null);
   const pendingSignalsRef = useRef([]);
   const reconnectAttemptsRef = useRef(0);
+  const iceServersRef = useRef([
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+  ]);
   const maxReconnectAttempts = 3;
   const connectionHealthRef = useRef(null);
   const iceConnectionStateRef = useRef('new');
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadIceServers = async () => {
+      try {
+        const response = await fetch('/api/ice');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled && Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
+          iceServersRef.current = data.iceServers;
+        }
+      } catch (err) {
+        // Keep default STUN servers on failure.
+      }
+    };
+    loadIceServers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Connection health check helpers (defined first to avoid circular dependencies)
   const stopConnectionHealthCheck = useCallback(() => {
@@ -144,14 +171,9 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
 
     const stream = localStreamRef.current || new MediaStream();
     
-    // Enhanced ICE servers for better connectivity (Discord-style)
-    const iceServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-    ];
+    const iceServers = Array.isArray(iceServersRef.current) && iceServersRef.current.length > 0
+      ? iceServersRef.current
+      : [{ urls: 'stun:stun.l.google.com:19302' }];
 
     const peer = new window.SimplePeer({
       initiator: Boolean(initiator),
@@ -584,31 +606,16 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         destroyPeer();
       }
       
-      // Auto-enable microphone when call starts (but keep it muted initially)
-      getLocalStream(true, false).then(() => {
-        console.log('[WebRTC] Local stream obtained, initializing peer');
-        setIsMicMuted(true); // Start muted
-        const peer = initPeer(callRole === 'caller');
-        if (peer) {
-          console.log('[WebRTC] Peer initialized, flushing pending signals');
-          // Small delay to ensure peer is fully ready
-          setTimeout(() => {
-            flushPendingSignals();
-          }, 100);
-        } else {
-          console.error('[WebRTC] Failed to initialize peer');
-        }
-      }).catch(err => {
-        console.error('[WebRTC] Failed to get local stream:', err);
-        // Continue anyway - user can enable mic manually
-        console.log('[WebRTC] Initializing peer without local stream');
-        const peer = initPeer(callRole === 'caller');
-        if (peer) {
-          setTimeout(() => {
-            flushPendingSignals();
-          }, 100);
-        }
-      });
+      setIsMicMuted(true);
+      const peer = initPeer(callRole === 'caller');
+      if (peer) {
+        console.log('[WebRTC] Peer initialized, flushing pending signals');
+        setTimeout(() => {
+          flushPendingSignals();
+        }, 100);
+      } else {
+        console.error('[WebRTC] Failed to initialize peer');
+      }
 
       return () => {
         console.log('[WebRTC] Cleaning up peer connection');
@@ -624,7 +631,29 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       setIsCameraEnabled(false);
       setIsScreenSharing(false);
     }
-  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream, getLocalStream]);
+  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRestart = () => {
+      if (!isInCall) return;
+      console.log('[WebRTC] Received call_restart, reinitializing peer');
+      destroyPeer();
+      const peer = initPeer(callRole === 'caller');
+      if (peer) {
+        setTimeout(() => {
+          flushPendingSignals();
+        }, 100);
+      }
+    };
+
+    socket.on('call_restart', handleRestart);
+
+    return () => {
+      socket.off('call_restart', handleRestart);
+    };
+  }, [socket, isInCall, callRole, initPeer, destroyPeer, flushPendingSignals]);
 
   // Handle WebRTC signals from server
   useEffect(() => {
