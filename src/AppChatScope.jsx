@@ -238,7 +238,7 @@ function AppChatScope() {
                   typingIndicator={typingIndicator}
                   scrollBehavior="smooth"
                 >
-            {messages.map((msg) => {
+                  {messages.map((msg) => {
               if (msg.deleted) {
                 return (
                   <Message
@@ -336,7 +336,7 @@ function AppChatScope() {
                   </div>
                 </div>
               );
-            })}
+                  })}
                 </MessageList>
               </ChatContainer>
             </MainContainer>
