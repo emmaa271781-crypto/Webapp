@@ -22,6 +22,8 @@ import CallPanel from './components/CallPanel';
 import CallBanner from './components/CallBanner';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
+import MessageComposer from './components/MessageComposer';
+import MessageActions from './components/MessageActions';
 import './App.css';
 
 function AppChatScope() {
@@ -119,14 +121,7 @@ function AppChatScope() {
   const toggleSound = () => setSoundEnabled(!soundEnabled);
   const toggleNotify = () => setNotifyEnabled(!notifyEnabled);
 
-  const handleSend = (innerHtml, textContent, innerText, nodes) => {
-    if (!socket || !currentUser || !textContent.trim()) return;
-
-    socket.emit('message', {
-      text: textContent.trim(),
-      user: currentUser,
-    });
-  };
+  // MessageComposer handles sending, so we don't need handleSend for ChatScope MessageInput
 
   const handleReaction = (messageId, emoji) => {
     if (!socket || !currentUser) return;
@@ -209,8 +204,8 @@ function AppChatScope() {
             )}
           </AnimatePresence>
 
-          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            <MainContainer style={{ flex: 1, minHeight: 0 }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <MainContainer style={{ height: '100%', flex: 1 }}>
               <ChatContainer>
                 <ConversationHeader>
                   <ConversationHeader.Content>
@@ -277,32 +272,68 @@ function AppChatScope() {
                 </button>
               ));
 
+              // Use MessageBubble for better formatting with replies, files, etc.
               return (
-                <Message
-                  key={msg.id}
-                  model={{
-                    message: msg.text,
-                    sentTime: new Date(msg.timestamp).toLocaleTimeString(),
-                    sender: msg.user,
-                    direction: msg.user === currentUser ? 'outgoing' : 'incoming',
-                  }}
-                >
-                  {reactionButtons.length > 0 && (
-                    <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                      {reactionButtons}
-                    </div>
-                  )}
-                </Message>
+                <div key={msg.id} style={{ marginBottom: '0.5rem' }}>
+                  <Message
+                    model={{
+                      message: msg.text || (msg.file ? `[${msg.file.kind}]` : ''),
+                      sentTime: new Date(msg.timestamp).toLocaleTimeString(),
+                      sender: msg.user,
+                      direction: msg.user === currentUser ? 'outgoing' : 'incoming',
+                    }}
+                  >
+                    {msg.replyTo && (
+                      <div style={{ 
+                        marginBottom: '8px', 
+                        padding: '8px', 
+                        background: 'rgba(74, 222, 128, 0.1)', 
+                        borderRadius: '4px',
+                        borderLeft: '3px solid #4ade80',
+                        fontSize: '0.85rem'
+                      }}>
+                        <div style={{ color: '#a8d5ba', fontWeight: 600, marginBottom: '4px' }}>
+                          {msg.replyTo.user}
+                        </div>
+                        <div style={{ color: '#7fb3a0' }}>
+                          {msg.replyTo.text?.slice(0, 50) || '(message deleted)'}
+                        </div>
+                      </div>
+                    )}
+                    {msg.file && (
+                      <div style={{ marginTop: '8px' }}>
+                        {msg.file.kind === 'image' ? (
+                          <img src={msg.file.url} alt={msg.file.name} style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
+                        ) : (
+                          <video src={msg.file.url} controls style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '8px' }} />
+                        )}
+                      </div>
+                    )}
+                    {reactionButtons.length > 0 && (
+                      <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                        {reactionButtons}
+                      </div>
+                    )}
+                  </Message>
+                  <div style={{ 
+                    display: 'flex', 
+                    justifyContent: msg.user === currentUser ? 'flex-end' : 'flex-start',
+                    marginTop: '4px',
+                    opacity: 0,
+                    transition: 'opacity 0.2s'
+                  }} 
+                  className="message-actions-wrapper"
+                  onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+                  onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
+                    <MessageActions message={msg} currentUser={currentUser} socket={socket} />
+                  </div>
+                </div>
               );
             })}
               </MessageList>
-              <MessageInput
-                placeholder="Type message here"
-                onSend={handleSend}
-                attachButton={false}
-              />
             </ChatContainer>
           </MainContainer>
+          <MessageComposer currentUser={currentUser} socket={socket} />
         </div>
       </div>
     </div>
