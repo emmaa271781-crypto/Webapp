@@ -24,8 +24,16 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       return peerRef.current;
     }
 
+    // Wait for SimplePeer to load
     if (!window.SimplePeer) {
-      console.error('[WebRTC] SimplePeer not loaded');
+      console.error('[WebRTC] SimplePeer not loaded, waiting...');
+      const checkSimplePeer = setInterval(() => {
+        if (window.SimplePeer) {
+          clearInterval(checkSimplePeer);
+          initPeer(initiator);
+        }
+      }, 100);
+      setTimeout(() => clearInterval(checkSimplePeer), 5000);
       return null;
     }
 
@@ -94,25 +102,34 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
 
     peer.on('close', () => {
       console.log('[WebRTC] Peer connection closed');
-      if (reconnectAttemptsRef.current < maxReconnectAttempts && isInCall) {
-        reconnectAttemptsRef.current++;
-        console.log(`[WebRTC] Attempting reconnect ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`);
-        setTimeout(() => {
-          if (isInCall && socket) {
-            destroyPeer();
-            socket.emit('call_restart', { to: remotePeerId });
-            setTimeout(() => initPeer(callRole === 'caller'), 500);
-          }
-        }, 1000 * reconnectAttemptsRef.current);
-      } else {
-        setConnectionState('disconnected');
-        if (onCallEnd) onCallEnd();
+      setConnectionState('disconnected');
+      // Don't auto-reconnect on close - let user manually reconnect if needed
+      if (onCallEnd && !isInCall) {
+        onCallEnd();
       }
     });
 
     peer.on('error', (err) => {
       console.error('[WebRTC] Peer error:', err);
       setConnectionState('error');
+      
+      // Try to recover from non-fatal errors
+      if (reconnectAttemptsRef.current < maxReconnectAttempts && isInCall) {
+        reconnectAttemptsRef.current++;
+        console.log(`[WebRTC] Attempting recovery ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`);
+        setTimeout(() => {
+          if (isInCall && socket && remotePeerId) {
+            destroyPeer();
+            socket.emit('call_restart', { to: remotePeerId });
+            setTimeout(() => {
+              const newPeer = initPeer(callRole === 'caller');
+              if (newPeer) {
+                flushPendingSignals();
+              }
+            }, 500);
+          }
+        }, 1000 * reconnectAttemptsRef.current);
+      }
     });
 
     peerRef.current = peer;
@@ -171,11 +188,22 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       if (peerRef.current && stream.getTracks().length > 0) {
         stream.getTracks().forEach(track => {
           if (peerRef.current) {
-            peerRef.current.addTrack(track, stream);
+            try {
+              peerRef.current.addTrack(track, stream);
+            } catch (err) {
+              console.warn('[WebRTC] Error adding track:', err);
+            }
           }
         });
+        // Trigger renegotiation for callee
         if (callRole !== 'caller' && peerRef.current.negotiate) {
-          peerRef.current.negotiate();
+          setTimeout(() => {
+            try {
+              peerRef.current.negotiate();
+            } catch (err) {
+              console.warn('[WebRTC] Error negotiating:', err);
+            }
+          }, 100);
         }
       }
 
