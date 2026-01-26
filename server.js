@@ -721,6 +721,17 @@ io.on("connection", (socket) => {
     io.to(target).emit("call_negotiate", { from: socket.id });
   });
 
+  socket.on("call_restart", (payload) => {
+    if (!socket.data.authed) {
+      return;
+    }
+    const target = payload?.to || getPeerId();
+    if (!target) {
+      return;
+    }
+    io.to(target).emit("call_restart", { from: socket.id });
+  });
+
   socket.on("disconnect", () => {
     if (socket.data.authed && socket.data.username) {
       socket.broadcast.emit(

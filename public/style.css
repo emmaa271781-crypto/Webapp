@@ -371,6 +371,13 @@ body {
   overflow: hidden;
 }
 
+.call-panel.expanded {
+  position: fixed;
+  inset: 80px 16px 16px 16px;
+  max-height: none;
+  z-index: 12;
+}
+
 .call-panel.show {
   display: flex;
 }
@@ -491,6 +498,40 @@ body {
 .call-status {
   font-size: 0.75rem;
   color: #9ca3af;
+}
+
+.call-settings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.call-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: #cbd5f5;
+}
+
+.call-setting select {
+  background: #0f1422;
+  border: 1px solid #2a334a;
+  color: #e5e7eb;
+  border-radius: 0.4rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.call-setting-actions button {
+  border: 1px solid #2a334a;
+  background: #1a1f2e;
+  color: #e5e7eb;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.75rem;
 }
 
 @keyframes callFade {
@@ -995,6 +1036,10 @@ body {
     margin: 0.75rem 1rem 0;
     padding: 0.75rem;
     max-height: 40vh;
+  }
+
+  .call-panel.expanded {
+    inset: 72px 10px 10px 10px;
   }
 
   .call-banner {

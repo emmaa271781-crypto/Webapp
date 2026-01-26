@@ -78,6 +78,38 @@
               <div class="call-title">Voice Call</div>
               <span id="call-status" class="call-status-pill">Waiting</span>
             </div>
+            <div class="call-settings">
+              <div class="call-setting">
+                <span>Camera</span>
+                <select id="camera-resolution">
+                  <option value="640x360">360p</option>
+                  <option value="1280x720" selected>720p</option>
+                  <option value="1920x1080">1080p</option>
+                </select>
+                <select id="camera-fps">
+                  <option value="15">15 fps</option>
+                  <option value="30" selected>30 fps</option>
+                  <option value="60">60 fps</option>
+                </select>
+              </div>
+              <div class="call-setting">
+                <span>Share</span>
+                <select id="share-resolution">
+                  <option value="1280x720" selected>720p</option>
+                  <option value="1920x1080">1080p</option>
+                  <option value="2560x1440">1440p</option>
+                </select>
+                <select id="share-fps">
+                  <option value="15">15 fps</option>
+                  <option value="30" selected>30 fps</option>
+                  <option value="60">60 fps</option>
+                </select>
+              </div>
+              <div class="call-setting call-setting-actions">
+                <button id="call-toggle-size" type="button">Expand</button>
+                <button id="call-fullscreen" type="button">Fullscreen</button>
+              </div>
+            </div>
             <div class="call-grid">
               <div id="remote-tile" class="call-tile">
                 <div id="remote-label" class="call-label">Remote</div>

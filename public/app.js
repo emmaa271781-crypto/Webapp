@@ -56,6 +56,12 @@ const profileForm = document.getElementById("profile-form");
 const profileNameInput = document.getElementById("profile-name");
 const profileAvatarInput = document.getElementById("profile-avatar");
 const profileCancel = document.getElementById("profile-cancel");
+const cameraResolutionSelect = document.getElementById("camera-resolution");
+const cameraFpsSelect = document.getElementById("camera-fps");
+const shareResolutionSelect = document.getElementById("share-resolution");
+const shareFpsSelect = document.getElementById("share-fps");
+const callToggleSize = document.getElementById("call-toggle-size");
+const callFullscreen = document.getElementById("call-fullscreen");
 const soundToggle = document.getElementById("sound-toggle");
 const notifyToggle = document.getElementById("notify-toggle");
 const editBanner = document.getElementById("edit-banner");
@@ -104,6 +110,10 @@ let cameraAdded = false;
 let screenTrack = null;
 let callStartAt = null;
 let callConnectedAt = null;
+let callRetryCount = 0;
+let callRetryTimer = null;
+let callHealthTimer = null;
+let callEndedByUser = false;
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -340,6 +350,71 @@ const openProfileOverlay = () => {
   profileOverlay.classList.add("show");
 };
 
+const parseResolution = (value, fallback) => {
+  const [width, height] = String(value || "")
+    .split("x")
+    .map((part) => Number(part));
+  if (!Number.isFinite(width) || !Number.isFinite(height)) {
+    return fallback;
+  }
+  return { width, height };
+};
+
+const getCameraConstraints = () => {
+  const resolution = parseResolution(
+    cameraResolutionSelect?.value,
+    { width: 1280, height: 720 }
+  );
+  const fps = Number(cameraFpsSelect?.value || 30);
+  return {
+    width: { ideal: resolution.width },
+    height: { ideal: resolution.height },
+    frameRate: { ideal: fps, max: fps },
+  };
+};
+
+const getShareConstraints = () => {
+  const resolution = parseResolution(
+    shareResolutionSelect?.value,
+    { width: 1280, height: 720 }
+  );
+  const fps = Number(shareFpsSelect?.value || 30);
+  return {
+    width: { ideal: resolution.width },
+    height: { ideal: resolution.height },
+    frameRate: { ideal: fps, max: fps },
+  };
+};
+
+const restartCameraTrack = async () => {
+  if (!isCameraEnabled) {
+    return;
+  }
+  if (cameraTrack && localStream) {
+    localStream.removeTrack(cameraTrack);
+    cameraTrack.stop();
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: getCameraConstraints(),
+    });
+    cameraTrack = stream.getVideoTracks()[0];
+    if (!localStream) {
+      localStream = new MediaStream();
+    }
+    localStream.addTrack(cameraTrack);
+    isCameraEnabled = true;
+    ensurePeer(callRole === "caller");
+    if (!isSharingScreen) {
+      await attachVideoTrack(cameraTrack);
+    }
+    updateLocalVideoPreview();
+    updateCallButtons();
+  } catch (error) {
+    addSystemMessage("Camera settings could not be applied.");
+  }
+};
+
 const closeProfileOverlay = () => {
   if (profileOverlay) {
     profileOverlay.classList.remove("show");
@@ -462,6 +537,38 @@ const handlePeerStream = (stream) => {
   updateCallStatus();
 };
 
+const scheduleCallRetry = () => {
+  if (callEndedByUser || callRetryCount >= 2 || !remotePeerId) {
+    return;
+  }
+  if (callRetryTimer) {
+    clearTimeout(callRetryTimer);
+  }
+  callRetryCount += 1;
+  callRetryTimer = setTimeout(() => {
+    if (!isInCall || callConnected) {
+      return;
+    }
+    if (callRole === "caller") {
+      socket.emit("call_restart", { to: remotePeerId });
+      destroyPeer();
+      ensurePeer(true);
+      flushPendingSignals();
+    }
+  }, 1500 * callRetryCount);
+};
+
+const startCallHealthCheck = () => {
+  if (callHealthTimer) {
+    clearTimeout(callHealthTimer);
+  }
+  callHealthTimer = setTimeout(() => {
+    if (isInCall && !callConnected && remotePeerId && callRole === "caller") {
+      scheduleCallRetry();
+    }
+  }, 8000);
+};
+
 const ensurePeer = (initiator) => {
   if (peer) {
     return peer;
@@ -504,11 +611,17 @@ const ensurePeer = (initiator) => {
   });
 
   peer.on("close", () => {
+    if (!callEndedByUser) {
+      scheduleCallRetry();
+      return;
+    }
     endCall(false);
   });
 
   peer.on("error", () => {
-    // Ignore peer errors to prevent hard crash.
+    if (!callEndedByUser) {
+      scheduleCallRetry();
+    }
   });
 
   return peer;
@@ -1680,6 +1793,7 @@ const endCall = (notifyPeer) => {
     socket.emit("call_leave");
     socket.emit("webrtc_hangup");
   }
+  callEndedByUser = Boolean(notifyPeer);
   if (peerConnection) {
     peerConnection.close();
     peerConnection = null;
@@ -1726,6 +1840,15 @@ const endCall = (notifyPeer) => {
   callConnectedAt = null;
   pendingIce = [];
   pendingRenegotiate = false;
+  callRetryCount = 0;
+  if (callRetryTimer) {
+    clearTimeout(callRetryTimer);
+    callRetryTimer = null;
+  }
+  if (callHealthTimer) {
+    clearTimeout(callHealthTimer);
+    callHealthTimer = null;
+  }
   micAdded = false;
   cameraAdded = false;
   destroyPeer();
@@ -2015,6 +2138,53 @@ if (profileForm) {
   });
 }
 
+if (cameraResolutionSelect) {
+  cameraResolutionSelect.addEventListener("change", () => {
+    restartCameraTrack();
+  });
+}
+
+if (cameraFpsSelect) {
+  cameraFpsSelect.addEventListener("change", () => {
+    restartCameraTrack();
+  });
+}
+
+if (shareResolutionSelect) {
+  shareResolutionSelect.addEventListener("change", () => {
+    if (isSharingScreen) {
+      addSystemMessage("Stop sharing to apply new share quality.");
+    }
+  });
+}
+
+if (shareFpsSelect) {
+  shareFpsSelect.addEventListener("change", () => {
+    if (isSharingScreen) {
+      addSystemMessage("Stop sharing to apply new share quality.");
+    }
+  });
+}
+
+if (callToggleSize) {
+  callToggleSize.addEventListener("click", () => {
+    callPanel.classList.toggle("expanded");
+    callToggleSize.textContent = callPanel.classList.contains("expanded")
+      ? "Minimize"
+      : "Expand";
+  });
+}
+
+if (callFullscreen) {
+  callFullscreen.addEventListener("click", () => {
+    if (!document.fullscreenElement) {
+      callPanel.requestFullscreen?.();
+    } else {
+      document.exitFullscreen?.();
+    }
+  });
+}
+
 callShareButton.addEventListener("click", () => {
   toggleScreenShare();
 });
@@ -2217,6 +2387,8 @@ socket.on("call_joined", async (payload) => {
   pendingRenegotiate = false;
   isMicMuted = true;
   isCameraEnabled = false;
+  callRetryCount = 0;
+  callEndedByUser = false;
   try {
     ensurePeer(callRole === "caller");
   } catch (error) {
@@ -2231,6 +2403,7 @@ socket.on("call_joined", async (payload) => {
   updateCallStatus();
   if (callRole === "caller") {
     flushPendingSignals();
+    startCallHealthCheck();
   }
 });
 
@@ -2246,6 +2419,7 @@ socket.on("call_peer", async (payload) => {
     ensurePeer(callRole === "caller");
   }
   flushPendingSignals();
+  startCallHealthCheck();
 });
 
 socket.on("call_started", (payload) => {
@@ -2262,6 +2436,7 @@ socket.on("call_connected", (payload) => {
     callConnectedAt = Date.now();
   }
   updateCallStatus();
+  startCallHealthCheck();
 });
 
 socket.on("call_peer_update", (payload) => {
@@ -2304,6 +2479,16 @@ socket.on("webrtc_signal", (payload) => {
   } catch (error) {
     // Ignore signaling errors.
   }
+});
+
+socket.on("call_restart", () => {
+  if (!isInCall) {
+    return;
+  }
+  destroyPeer();
+  ensurePeer(false);
+  flushPendingSignals();
+  startCallHealthCheck();
 });
 
 socket.on("call_negotiate", async (payload) => {
