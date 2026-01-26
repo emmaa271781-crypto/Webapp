@@ -1,0 +1,79 @@
+.join-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 8, 15, 0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 1000;
+}
+
+.join-card {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 2rem;
+  width: min(360px, 100%);
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.join-card h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: var(--text-primary);
+}
+
+.join-card p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.join-card input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  transition: border-color 0.2s ease;
+}
+
+.join-card input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.join-card input::placeholder {
+  color: var(--text-muted);
+}
+
+.join-card button {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--accent);
+  color: white;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin-top: 0.5rem;
+}
+
+.join-card button:hover {
+  background: var(--accent-hover);
+}
+
+.join-card .error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin: 0;
+}

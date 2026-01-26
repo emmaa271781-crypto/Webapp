@@ -1,68 +1,111 @@
-# Classroom CS
+# Classroom CS - Modern Chat App
 
-A lightweight realtime web messenger built with Express and Socket.IO. The
-project is ready for Railway hosting and will redeploy automatically whenever
-you push updates to GitHub.
+A polished, animated, Discord/iMessage-like realtime web messenger built with React, Socket.IO, and Framer Motion.
 
 ## Features
 
-- Realtime messaging with Socket.IO
-- Simple name picker with join/leave notices
-- Message history (last 100 messages in memory)
-- Railway-friendly `npm start` entry point
-- Password gate (default: `0327`)
-- Emoji shortcuts and GIF links
-- GIF search (via GIPHY API)
-- One-click call + screen share (WebRTC)
-- Image/video attachments (small files)
-- Message replies, reactions, edits/deletes, and notifications
-- Online list with typing indicator
-- Push notifications (works even after tab is closed)
+✨ **Modern UI**
+- Discord/iMessage-style message bubbles
+- Smooth Framer Motion animations
+- Polished, responsive design
+- Dark theme with beautiful gradients
 
-## Run locally
+💬 **Chat Features**
+- Realtime messaging with Socket.IO
+- Message replies and threading
+- Emoji reactions
+- Typing indicators
+- Message editing and deletion
+- GIF search (via GIPHY API)
+- Image/video attachments
+- Push notifications
+
+📞 **Voice & Video**
+- WebRTC voice/video calls
+- Screen sharing
+- Call status indicators
+
+## Tech Stack
+
+- **Frontend**: React 18, Framer Motion, Vite
+- **Backend**: Node.js, Express, Socket.IO
+- **Real-time**: Socket.IO for messaging, WebRTC for calls
+- **Deployment**: Railway-ready
+
+## Setup
+
+### Install Dependencies
 
 ```bash
 npm install
-npm run dev
 ```
 
-Open `http://localhost:3000` in multiple tabs to chat.
-
-### Password
-
-The default password is `0327`. You can override it by setting
-`CHAT_PASSWORD` in your environment.
-
-### GIF search
-
-GIF search uses GIPHY. Set `GIPHY_API_KEY` in Railway to enable results.
-
-### Push notifications
-
-To receive notifications after closing the tab, set VAPID keys:
+### Development
 
 ```bash
-npx web-push generate-vapid-keys
+# Run both server and React dev server
+npm run dev
+
+# Or run separately:
+npm run dev:server  # Server on port 3000
+npm run dev:client  # Vite dev server on port 5173
 ```
 
-Then set these environment variables in Railway:
+### Production Build
 
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
-- `VAPID_SUBJECT` (e.g. `mailto:admin@example.com`)
+```bash
+# Build React app
+npm run build
 
-## Railway deployment (GitHub-connected)
+# Start server (serves built React app)
+npm start
+```
 
-1. Push this repo to GitHub.
-2. In Railway, create a new project from your GitHub repo.
-3. Railway will detect the Node app and run:
-   - **Build:** `npm install` (default)
-   - **Start:** `npm start`
-4. Railway provides the `PORT` environment variable automatically.
+## Environment Variables
 
-After the first deploy, any GitHub push will trigger a new deployment, so your
-website stays in sync with your git updates.
+- `PORT` - Server port (default: 3000)
+- `CHAT_PASSWORD` - Room password (default: "0327")
+- `GIPHY_API_KEY` - For GIF search (optional)
+- `VAPID_PUBLIC_KEY` - For push notifications (optional)
+- `VAPID_PRIVATE_KEY` - For push notifications (optional)
+- `VAPID_SUBJECT` - For push notifications (optional)
 
-## Health check
+## Project Structure
 
-`GET /healthz` returns `{ "status": "ok" }` for uptime monitoring.
+```
+├── src/              # React source code
+│   ├── components/   # React components
+│   ├── hooks/        # Custom React hooks
+│   └── App.jsx       # Main app component
+├── public/           # Static files (built React app)
+├── server.js         # Express + Socket.IO server
+└── vite.config.js    # Vite configuration
+```
+
+## Features in Detail
+
+### Message Features
+- **Replies**: Click "Reply" on any message to reply
+- **Reactions**: Click emoji reactions (👍, 😂, ❤️, 🎉, 😮)
+- **Editing**: Edit your own messages
+- **Deletion**: Delete your own messages
+- **Attachments**: Upload images/videos (max 3MB)
+- **GIFs**: Search and send GIFs via GIPHY
+
+### Animations
+- Message slide-in animations
+- Reaction pop animations
+- Smooth hover effects
+- Typing indicator animations
+- Panel transitions
+
+## Deployment
+
+The app is Railway-ready. Just connect your GitHub repo and Railway will:
+1. Build the React app (`npm run build`)
+2. Start the server (`npm start`)
+3. Serve the built app from the `public/` directory
+
+## License
+
+ISC

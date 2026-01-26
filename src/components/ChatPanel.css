@@ -1,0 +1,42 @@
+.chat-panel {
+  flex: 1;
+  padding: 1rem 1.5rem;
+  overflow-y: auto;
+  min-height: 0;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding-bottom: 1rem;
+}
+
+.scroll-latest {
+  position: absolute;
+  right: 1.5rem;
+  bottom: 1rem;
+  border: 1px solid var(--border-light);
+  background: var(--bg-message);
+  color: var(--text-primary);
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+.scroll-latest:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .chat-panel {
+    padding: 1rem;
+  }
+}

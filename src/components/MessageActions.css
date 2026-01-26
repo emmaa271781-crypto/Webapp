@@ -1,0 +1,38 @@
+.message-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.action-button {
+  border: 1px solid var(--border-light);
+  background: var(--bg-message);
+  color: var(--text-primary);
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.action-button:hover {
+  background: var(--bg-secondary);
+  border-color: var(--accent);
+}
+
+.edit-button {
+  border-color: var(--border-light);
+}
+
+.delete-button {
+  border-color: var(--error);
+  background: var(--error);
+  color: white;
+}
+
+.delete-button:hover {
+  background: #dc2626;
+}

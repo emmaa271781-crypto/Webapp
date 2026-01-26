@@ -1,0 +1,82 @@
+.gif-panel {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem;
+  background: #151a26;
+  box-shadow: var(--shadow-lg);
+  margin-top: 0.5rem;
+}
+
+.gif-search {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.gif-search input {
+  flex: 1;
+  padding: 0.6rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.gif-search input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.gif-search button {
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm);
+  border: none;
+  background: var(--accent);
+  color: white;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.gif-search button:hover {
+  background: var(--accent-hover);
+}
+
+.gif-error {
+  color: var(--error);
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+
+.gif-loading {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+
+.gif-results {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.5rem;
+  max-height: 250px;
+  overflow-y: auto;
+  margin-top: 0.6rem;
+}
+
+.gif-result {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.gif-result img {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+}

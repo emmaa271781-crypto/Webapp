@@ -35,6 +35,7 @@ if (hasVapidKeys) {
 }
 
 app.use(express.json({ limit: "1mb" }));
+// Serve built React app from public directory
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/healthz", (req, res) => {
@@ -747,6 +748,15 @@ io.on("connection", (socket) => {
   });
 });
 
+// Fallback to index.html for React app (must be after all API routes)
+app.get("*", (req, res) => {
+  // Only serve index.html for non-API routes
+  if (!req.path.startsWith("/api") && !req.path.startsWith("/socket.io")) {
+    res.sendFile(path.join(__dirname, "public", "index.html"));
+  }
+});
+
 server.listen(PORT, () => {
   console.log(`Messenger running on port ${PORT}`);
+  console.log(`React app should be built and served from public/ directory`);
 });

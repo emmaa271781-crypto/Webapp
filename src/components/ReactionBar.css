@@ -1,0 +1,40 @@
+.reaction-bar {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.reaction-button {
+  border: 1px solid var(--border-light);
+  background: var(--bg-message);
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  transition: all 0.2s ease;
+}
+
+.reaction-button:hover {
+  border-color: var(--accent);
+  background: var(--bg-secondary);
+  transform: translateY(-1px);
+}
+
+.reaction-button.active {
+  border-color: var(--accent);
+  background: var(--bg-message-self);
+}
+
+.reaction-count {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.reaction-button.active .reaction-count {
+  color: var(--text-primary);
+}
