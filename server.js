@@ -30,6 +30,9 @@ const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "";
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:admin@example.com";
 const hasVapidKeys = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+const TURN_URL = process.env.TURN_URL || "";
+const TURN_USERNAME = process.env.TURN_USERNAME || "";
+const TURN_CREDENTIAL = process.env.TURN_CREDENTIAL || "";
 const messageHistory = [];
 const connectedUsers = new Map();
 const typingUsers = new Map();
@@ -65,6 +68,25 @@ app.use((req, res, next) => {
 
 app.get("/healthz", (req, res) => {
   res.status(200).json({ status: "ok" });
+});
+
+const buildIceServers = () => {
+  const servers = [{ urls: "stun:stun.l.google.com:19302" }];
+  if (TURN_URL && TURN_USERNAME && TURN_CREDENTIAL) {
+    const urls = TURN_URL.split(",").map((url) => url.trim()).filter(Boolean);
+    if (urls.length) {
+      servers.push({
+        urls,
+        username: TURN_USERNAME,
+        credential: TURN_CREDENTIAL,
+      });
+    }
+  }
+  return servers;
+};
+
+app.get("/api/ice", (req, res) => {
+  res.json({ iceServers: buildIceServers() });
 });
 
 const fetchGiphy = async (query) => {

@@ -114,6 +114,7 @@ let callRetryCount = 0;
 let callRetryTimer = null;
 let callHealthTimer = null;
 let callEndedByUser = false;
+let iceServers = [{ urls: "stun:stun.l.google.com:19302" }];
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
 const baseTitle = document.title;
 let unreadCount = 0;
@@ -456,6 +457,21 @@ const getAudioConstraints = () => ({
   autoGainControl: voiceIsolationEnabled,
 });
 
+const loadIceServers = async () => {
+  try {
+    const response = await fetch("/api/ice");
+    if (!response.ok) {
+      return;
+    }
+    const data = await response.json();
+    if (Array.isArray(data.iceServers) && data.iceServers.length) {
+      iceServers = data.iceServers;
+    }
+  } catch (error) {
+    // Ignore fetch errors.
+  }
+};
+
 const applyVoiceConstraints = async () => {
   if (!localStream) {
     return;
@@ -582,7 +598,7 @@ const ensurePeer = (initiator) => {
     trickle: true,
     stream: localStream.getTracks().length ? localStream : undefined,
     config: {
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers,
     },
   });
 
@@ -2349,6 +2365,7 @@ socket.on("auth_ok", (payload) => {
   clearEditTarget();
   updateCallButtons();
   updateLocalIdentity();
+  loadIceServers();
   if (notifyEnabled) {
     syncPushSubscription();
   }
@@ -2572,6 +2589,7 @@ updateNotifyButton();
 updateVoiceButton();
 updateTitle();
 updateLocalIdentity();
+loadIceServers();
 if (pushSupported) {
   registerServiceWorker();
 }
