@@ -16,20 +16,57 @@ oldFiles.forEach(file => {
   }
 });
 
-// Check if index.html still references old files and warn
+// Check if index.html still references old files and fix it
 const indexPath = path.join(publicDir, 'index.html');
 if (fs.existsSync(indexPath)) {
   const indexContent = fs.readFileSync(indexPath, 'utf8');
   if (indexContent.includes('app.js') || indexContent.includes('style.css')) {
     console.error('❌ ERROR: index.html still references old app.js or style.css!');
-    console.error('   This means Vite did not properly build the React app.');
-    console.error('   The old public/index.html may have been preserved.');
-    console.error('   Attempting to fix by checking if src/index.html exists...');
+    console.error('   The old public/index.html was not replaced by Vite build.');
+    console.error('   Attempting to replace with React version from src/index.html...');
     
     const srcIndexPath = path.join(projectRoot, 'src', 'index.html');
     if (fs.existsSync(srcIndexPath)) {
-      console.log('   Found src/index.html - Vite should have used this.');
-      console.log('   The build may have failed or the old file was not replaced.');
+      const srcIndexContent = fs.readFileSync(srcIndexPath, 'utf8');
+      // Vite will have processed this, so we need to check if assets were built
+      const assetsDir = path.join(publicDir, 'assets');
+      if (fs.existsSync(assetsDir)) {
+        const assetFiles = fs.readdirSync(assetsDir);
+        const jsFile = assetFiles.find(f => f.endsWith('.js'));
+        const cssFile = assetFiles.find(f => f.endsWith('.css'));
+        
+        if (jsFile && cssFile) {
+          // Build the correct index.html with Vite-processed assets
+          const correctIndex = `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Classroom CS - Modern Chat</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/assets/${cssFile}" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
+    <script type="module" src="/assets/${jsFile}"></script>
+  </body>
+</html>`;
+          fs.writeFileSync(indexPath, correctIndex);
+          console.log('✅ Fixed index.html with correct React references');
+        } else {
+          console.error('   ⚠️  Assets not found - build may have failed');
+        }
+      } else {
+        console.error('   ⚠️  Assets directory not found - build may have failed');
+      }
+    } else {
+      console.error('   ❌ src/index.html not found!');
     }
   } else {
     console.log('✅ index.html is clean (no old file references)');
