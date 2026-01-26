@@ -9,7 +9,7 @@ export function CheckersBoard({ G, ctx, moves, events, playerID }) {
     if (selectedCell === null) {
       // Select piece
       const piece = G.cells[id];
-      if (piece !== null && ((playerID === '0' && (piece === 1 || piece === 3)) || (playerID === '1' && (piece === 2 || piece === 4)))) {
+      if (piece !== null && ((currentPlayerID === '0' && (piece === 1 || piece === 3)) || (currentPlayerID === '1' && (piece === 2 || piece === 4)))) {
         setSelectedCell(id);
       }
     } else {

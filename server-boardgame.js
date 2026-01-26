@@ -1,12 +1,5 @@
 // Boardgame.io server integration
 const { Server } = require('boardgame.io/server');
-const { TicTacToe } = require('./src/games/TicTacToe');
-const { Checkers } = require('./src/games/Checkers');
-const { ConnectFour } = require('./src/games/ConnectFour');
-const { Chess } = require('./src/games/Chess');
-
-// Import games (we'll need to convert them to CommonJS or use a different approach)
-// For now, let's define them inline
 
 const TicTacToeGame = {
   setup: () => ({
@@ -163,10 +156,14 @@ const server = Server({
   games: [TicTacToeGame, CheckersGame, ConnectFourGame, ChessGame],
 });
 
-const PORT = process.env.BOARDGAME_PORT || 8000;
+// Export server for integration with main server
+// The server can be started separately or integrated into main server
+module.exports = { server, TicTacToeGame, CheckersGame, ConnectFourGame, ChessGame };
 
-server.run({ port: PORT }, () => {
-  console.log(`🎲 Boardgame.io server running on port ${PORT}`);
-});
-
-module.exports = { server };
+// If run directly, start the server
+if (require.main === module) {
+  const PORT = process.env.BOARDGAME_PORT || 8000;
+  server.run({ port: PORT }, () => {
+    console.log(`🎲 Boardgame.io server running on port ${PORT}`);
+  });
+}
