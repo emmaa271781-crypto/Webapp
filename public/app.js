@@ -499,6 +499,10 @@ const ensurePeer = (initiator) => {
     handlePeerStream(stream);
   });
 
+  peer.on("track", (track, stream) => {
+    handlePeerStream(stream);
+  });
+
   peer.on("close", () => {
     endCall(false);
   });
@@ -1627,6 +1631,9 @@ const attachAudioTrack = async (track) => {
   if (!micAdded) {
     peer.addTrack(track, localStream);
     micAdded = true;
+    if (!peerInitiator && peer.negotiate) {
+      peer.negotiate();
+    }
   }
 };
 
@@ -1637,8 +1644,14 @@ const attachVideoTrack = async (track) => {
   if (!cameraAdded) {
     peer.addTrack(track, localStream);
     cameraAdded = true;
+    if (!peerInitiator && peer.negotiate) {
+      peer.negotiate();
+    }
   } else if (cameraTrack && peer.replaceTrack) {
     peer.replaceTrack(cameraTrack, track, localStream);
+    if (!peerInitiator && peer.negotiate) {
+      peer.negotiate();
+    }
   }
 };
 
@@ -1650,6 +1663,9 @@ const clearVideoTrack = async () => {
     peer.removeTrack(cameraTrack, localStream);
   }
   cameraAdded = false;
+  if (!peerInitiator && peer.negotiate) {
+    peer.negotiate();
+  }
 };
 
 const endCall = (notifyPeer) => {
@@ -1746,9 +1762,15 @@ const stopScreenShare = () => {
   if (screenTrack) {
     if (peer && peer.replaceTrack && cameraTrack && isCameraEnabled) {
       peer.replaceTrack(screenTrack, cameraTrack, localStream);
+      if (!peerInitiator && peer.negotiate) {
+        peer.negotiate();
+      }
     } else if (peer && peer.removeTrack && localStream) {
       peer.removeTrack(screenTrack, localStream);
       cameraAdded = false;
+      if (!peerInitiator && peer.negotiate) {
+        peer.negotiate();
+      }
     }
     screenTrack.stop();
     screenTrack = null;
@@ -1777,6 +1799,9 @@ const toggleScreenShare = async () => {
     }
     if (cameraTrack && isCameraEnabled && peer.replaceTrack) {
       await peer.replaceTrack(cameraTrack, screenTrack, localStream);
+      if (!peerInitiator && peer.negotiate) {
+        peer.negotiate();
+      }
     } else {
       await attachVideoTrack(screenTrack);
       cameraAdded = true;
