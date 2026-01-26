@@ -24,14 +24,36 @@ function ReactionBar({ message, socket, currentUser }) {
             key={emoji}
             className={`reaction-button ${isActive ? 'active' : ''}`}
             onClick={() => handleReaction(emoji)}
-            whileHover={{ scale: 1.1 }}
+            whileHover={{ scale: 1.15, y: -2 }}
             whileTap={{ scale: 0.9 }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            initial={{ scale: 0, rotate: -180 }}
+            animate={{ scale: 1, rotate: 0 }}
+            transition={{ 
+              type: 'spring', 
+              stiffness: 500, 
+              damping: 25,
+              delay: REACTION_EMOJIS.indexOf(emoji) * 0.03
+            }}
           >
-            <span>{emoji}</span>
-            {count > 0 && <span className="reaction-count">{count}</span>}
+            <motion.span
+              animate={isActive ? { 
+                scale: [1, 1.2, 1],
+                rotate: [0, 10, -10, 0]
+              } : {}}
+              transition={{ duration: 0.4 }}
+            >
+              {emoji}
+            </motion.span>
+            {count > 0 && (
+              <motion.span 
+                className="reaction-count"
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.1 }}
+              >
+                {count}
+              </motion.span>
+            )}
           </motion.button>
         );
       })}

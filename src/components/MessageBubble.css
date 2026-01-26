@@ -2,23 +2,28 @@
   background: var(--bg-message);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  padding: 0.7rem 0.9rem;
+  padding: 0.75rem 1rem;
   position: relative;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .message-bubble.own {
-  background: var(--bg-message-self);
+  background: linear-gradient(135deg, var(--bg-message-self) 0%, #2d3658 100%);
   border-color: #3b4470;
+  box-shadow: 0 4px 12px rgba(88, 101, 242, 0.15);
 }
 
 .message-bubble.deleted {
-  opacity: 0.6;
+  opacity: 0.5;
+  filter: grayscale(0.5);
 }
 
 .message-bubble:hover {
-  border-color: var(--border-light);
-  box-shadow: var(--shadow-sm);
+  border-color: var(--accent);
+  box-shadow: 0 4px 16px rgba(88, 101, 242, 0.2);
+  transform: translateY(-1px);
 }
 
 .message-meta {

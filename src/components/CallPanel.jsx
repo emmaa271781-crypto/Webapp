@@ -30,10 +30,10 @@ function CallPanel({
   } = useWebRTC(socket, isInCall, callRole, remotePeerId, onEnd);
 
   useEffect(() => {
-    // Ensure remote audio plays
+    // Ensure remote audio plays with browser compatibility
     if (remoteAudioRef.current && remoteStream) {
-      remoteAudioRef.current.play().catch(err => {
-        console.warn('[CallPanel] Audio autoplay blocked:', err);
+      import('../utils/browserCompatibility').then(({ ensureAudioPlayback }) => {
+        ensureAudioPlayback(remoteAudioRef.current);
       });
     }
   }, [remoteStream]);
@@ -69,10 +69,16 @@ function CallPanel({
   return (
     <motion.div
       className="call-panel"
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      transition={{ duration: 0.2 }}
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+      transition={{ 
+        duration: 0.4,
+        ease: [0.34, 1.56, 0.64, 1],
+        type: "spring",
+        stiffness: 300,
+        damping: 25
+      }}
     >
       <div className="call-header">
         <div className="call-title">Voice Call</div>
@@ -150,32 +156,43 @@ function CallPanel({
         <motion.button
           className={`call-action-button ${isMicMuted ? '' : 'active'}`}
           onClick={toggleMic}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.08, y: -2 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
-          {isMicMuted ? '🎤 Mic Off' : '🎤 Mic On'}
+          <motion.span
+            animate={!isMicMuted ? { 
+              scale: [1, 1.2, 1],
+            } : {}}
+            transition={{ duration: 0.3 }}
+          >
+            {isMicMuted ? '🎤 Mic Off' : '🎤 Mic On'}
+          </motion.span>
         </motion.button>
         <motion.button
           className={`call-action-button ${isCameraEnabled ? 'active' : ''}`}
           onClick={toggleCamera}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.08, y: -2 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
           {isCameraEnabled ? '📹 Camera On' : '📹 Camera Off'}
         </motion.button>
         <motion.button
           className={`call-action-button ${isScreenSharing ? 'active' : ''}`}
           onClick={toggleScreenShare}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.08, y: -2 }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
           {isScreenSharing ? '🖥️ Stop Share' : '🖥️ Share Screen'}
         </motion.button>
         <motion.button
           className="call-action-button danger"
           onClick={onEnd}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.08, y: -2, rotate: [0, -5, 5, -5, 0] }}
+          whileTap={{ scale: 0.92 }}
+          transition={{ type: "spring", stiffness: 400, damping: 17 }}
         >
           📞 Hang up
         </motion.button>

@@ -36,10 +36,10 @@ function ChatPanel({ messages, currentUser, typingUsers, socket }) {
   return (
     <div className="chat-panel" ref={chatPanelRef}>
       <div className="chat-messages">
-        <AnimatePresence initial={false}>
+        <AnimatePresence initial={false} mode="popLayout">
           {messages.map((message, index) => (
             <Message
-              key={message.id || index}
+              key={message.id || `msg-${index}`}
               message={message}
               currentUser={currentUser}
               socket={socket}

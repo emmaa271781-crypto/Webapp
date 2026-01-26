@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { checkWebRTCSupport, getOptimalConstraints, ensureAudioPlayback } from '../utils/browserCompatibility';
 
 export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const [localStream, setLocalStream] = useState(null);
@@ -17,6 +18,8 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const pendingSignalsRef = useRef([]);
   const reconnectAttemptsRef = useRef(0);
   const maxReconnectAttempts = 3;
+  const connectionHealthRef = useRef(null);
+  const iceConnectionStateRef = useRef('new');
 
   // Initialize SimplePeer
   const initPeer = useCallback((initiator) => {
@@ -39,15 +42,28 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
 
     const stream = localStreamRef.current || new MediaStream();
     
+    // Enhanced ICE servers for better connectivity (Discord-style)
+    const iceServers = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun4.l.google.com:19302' },
+    ];
+
     const peer = new window.SimplePeer({
       initiator: Boolean(initiator),
       trickle: true,
       stream: stream.getTracks().length > 0 ? stream : undefined,
       config: {
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' },
-        ],
+        iceServers,
+        iceCandidatePoolSize: 10, // Pre-gather more candidates
+      },
+      // Better browser compatibility
+      sdpTransform: (sdp) => {
+        // Fix for Safari and older browsers
+        sdp = sdp.replace(/a=extmap-allow-mixed\r\n/g, '');
+        return sdp;
       },
     });
 
@@ -63,7 +79,54 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       console.log('[WebRTC] Peer connected');
       setConnectionState('connected');
       reconnectAttemptsRef.current = 0;
+      startConnectionHealthCheck();
     });
+
+    // Monitor ICE connection state (Discord-style verification)
+    if (peer._pc) {
+      peer._pc.addEventListener('iceconnectionstatechange', () => {
+        const state = peer._pc?.iceConnectionState;
+        iceConnectionStateRef.current = state;
+        console.log('[WebRTC] ICE connection state:', state);
+        
+        if (state === 'connected' || state === 'completed') {
+          setConnectionState('connected');
+          startConnectionHealthCheck();
+        } else if (state === 'disconnected') {
+          setConnectionState('connecting');
+          // Try to recover
+          setTimeout(() => {
+            if (peer._pc && peer._pc.iceConnectionState === 'disconnected' && isInCall) {
+              console.log('[WebRTC] Attempting ICE restart');
+              peer._pc.restartIce();
+            }
+          }, 2000);
+        } else if (state === 'failed') {
+          setConnectionState('error');
+          // Attempt recovery
+          if (reconnectAttemptsRef.current < maxReconnectAttempts) {
+            reconnectAttemptsRef.current++;
+            setTimeout(() => {
+              if (isInCall && socket && remotePeerId) {
+                destroyPeer();
+                socket.emit('call_restart', { to: remotePeerId });
+                setTimeout(() => initPeer(callRole === 'caller'), 500);
+              }
+            }, 1000 * reconnectAttemptsRef.current);
+          }
+        }
+      });
+
+      peer._pc.addEventListener('connectionstatechange', () => {
+        const state = peer._pc?.connectionState;
+        console.log('[WebRTC] Connection state:', state);
+        if (state === 'connected') {
+          setConnectionState('connected');
+        } else if (state === 'disconnected' || state === 'failed') {
+          setConnectionState('connecting');
+        }
+      });
+    }
 
     peer.on('stream', (stream) => {
       console.log('[WebRTC] Received remote stream');
@@ -75,9 +138,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       }
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
-        remoteAudioRef.current.play().catch(err => {
-          console.warn('[WebRTC] Audio autoplay blocked:', err);
-        });
+        await ensureAudioPlayback(remoteAudioRef.current);
       }
     });
 
@@ -94,9 +155,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       }
       if (track.kind === 'audio' && remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = remoteStreamRef.current;
-        remoteAudioRef.current.play().catch(err => {
-          console.warn('[WebRTC] Audio autoplay blocked:', err);
-        });
+        await ensureAudioPlayback(remoteAudioRef.current);
       }
     });
 
@@ -138,6 +197,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
 
   // Destroy peer connection
   const destroyPeer = useCallback(() => {
+    stopConnectionHealthCheck();
     if (peerRef.current) {
       try {
         peerRef.current.destroy();
@@ -148,7 +208,8 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     }
     pendingSignalsRef.current = [];
     reconnectAttemptsRef.current = 0;
-  }, []);
+    iceConnectionStateRef.current = 'new';
+  }, [stopConnectionHealthCheck]);
 
   // Flush pending signals
   const flushPendingSignals = useCallback(() => {
@@ -159,6 +220,49 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     });
     pendingSignalsRef.current = [];
   }, [socket, remotePeerId]);
+
+  // Connection health check (Discord-style)
+  const startConnectionHealthCheck = useCallback(() => {
+    if (connectionHealthRef.current) {
+      clearInterval(connectionHealthRef.current);
+    }
+
+    connectionHealthRef.current = setInterval(() => {
+      if (!peerRef.current?._pc) {
+        clearInterval(connectionHealthRef.current);
+        return;
+      }
+
+      const stats = {
+        iceConnectionState: peerRef.current._pc.iceConnectionState,
+        connectionState: peerRef.current._pc.connectionState,
+        signalingState: peerRef.current._pc.signalingState,
+      };
+
+      // Check if connection is healthy
+      if (stats.iceConnectionState === 'connected' || stats.iceConnectionState === 'completed') {
+        // Connection is good
+        setConnectionState('connected');
+      } else if (stats.iceConnectionState === 'disconnected') {
+        // Try ICE restart
+        try {
+          peerRef.current._pc.restartIce();
+        } catch (err) {
+          console.warn('[WebRTC] ICE restart failed:', err);
+        }
+      } else if (stats.iceConnectionState === 'failed') {
+        setConnectionState('error');
+        clearInterval(connectionHealthRef.current);
+      }
+    }, 3000); // Check every 3 seconds
+  }, []);
+
+  const stopConnectionHealthCheck = useCallback(() => {
+    if (connectionHealthRef.current) {
+      clearInterval(connectionHealthRef.current);
+      connectionHealthRef.current = null;
+    }
+  }, []);
 
   // Get local media stream
   const getLocalStream = useCallback(async (audio = true, video = false) => {
@@ -447,13 +551,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      stopConnectionHealthCheck();
       destroyPeer();
       stopLocalStream();
       if (remoteStreamRef.current) {
         remoteStreamRef.current.getTracks().forEach(track => track.stop());
       }
     };
-  }, [destroyPeer, stopLocalStream]);
+  }, [destroyPeer, stopLocalStream, stopConnectionHealthCheck]);
 
   return {
     localStream,
