@@ -34,3 +34,88 @@
   min-height: 0;
   overflow: hidden;
 }
+
+/* Override ChatScope styles to match green theme */
+.cs-main-container,
+.cs-chat-container {
+  background: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message-list {
+  background: var(--bg-primary) !important;
+  background-color: var(--bg-primary) !important;
+}
+
+.cs-message-list-content {
+  background: var(--bg-primary) !important;
+  background-color: var(--bg-primary) !important;
+}
+
+.cs-conversation-header {
+  background: var(--bg-secondary) !important;
+  border-bottom: 1px solid var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-conversation-header__content {
+  background: transparent !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message {
+  background: transparent !important;
+}
+
+.cs-message__content {
+  background: var(--bg-message) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message--outgoing .cs-message__content {
+  background: var(--bg-message-self) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message__content-wrapper {
+  background: transparent !important;
+}
+
+.cs-typing-indicator {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+}
+
+/* Message input area */
+.cs-message-input {
+  background: var(--bg-secondary) !important;
+  border-top: 1px solid var(--border-color) !important;
+}
+
+.cs-message-input__content-editor-wrapper {
+  background: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message-input__content-editor {
+  background: var(--bg-input) !important;
+  color: var(--text-primary) !important;
+}
+
+.cs-message-input__content-editor::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Override any white backgrounds */
+.cs-main-container *,
+.cs-chat-container * {
+  background-color: transparent !important;
+}
+
+.cs-main-container,
+.cs-chat-container,
+.cs-message-list,
+.cs-message-list-content {
+  background: var(--bg-primary) !important;
+  background-color: var(--bg-primary) !important;
+}
