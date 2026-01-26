@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Realtime web messenger with Socket.IO",
   "main": "server.js",
-  "type": "module",
   "scripts": {
     "start": "node server.js",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
