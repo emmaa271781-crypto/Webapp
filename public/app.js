@@ -220,7 +220,6 @@ const destroyPeer = () => {
     reconnectTimer = null;
   }
   reconnectAttempts = 0;
-  restartInProgress = false;
 };
 
 const scheduleReconnect = (reason) => {
@@ -233,14 +232,38 @@ const scheduleReconnect = (reason) => {
   restartInProgress = true;
   reconnectAttempts += 1;
   setCallStatus(`Reconnecting (${reconnectAttempts})`);
-  reconnectTimer = setTimeout(() => {
-    if (!isInCall) return;
+  if (callRole !== "caller") {
     destroyPeer();
     if (socket) {
       socket.emit("call_restart", { to: remotePeerId });
     }
-    ensurePeer(callRole === "caller");
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null;
+      if (!isInCall) {
+        restartInProgress = false;
+        return;
+      }
+      if (!peer) {
+        ensurePeer(false);
+        flushPendingSignals();
+      }
+      restartInProgress = false;
+    }, 4000);
+    return;
+  }
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    if (!isInCall) {
+      restartInProgress = false;
+      return;
+    }
+    destroyPeer();
+    if (socket) {
+      socket.emit("call_restart", { to: remotePeerId });
+    }
+    ensurePeer(true);
     flushPendingSignals();
+    restartInProgress = false;
   }, 1000 * reconnectAttempts);
 };
 
@@ -828,6 +851,7 @@ socket.on("call_joined", (payload) => {
     ensurePeer(callRole === "caller");
     flushPendingSignals();
   }
+  ensureAudioPlayback();
   if (!connectionWatchdog) {
     connectionWatchdog = setInterval(() => {
       if (!isInCall || !remotePeerId) return;
