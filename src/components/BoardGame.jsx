@@ -12,6 +12,7 @@ const TicTacToe = {
   turn: { minMoves: 1, maxMoves: 1 },
   moves: {
     clickCell: (G, ctx, id) => {
+      if (!G || !G.cells || !Array.isArray(G.cells) || !ctx || id === undefined) return G;
       if (G.cells[id] !== null) return G;
       const cells = [...G.cells];
       cells[id] = ctx.currentPlayer;
@@ -19,21 +20,26 @@ const TicTacToe = {
     },
   },
   endIf: (G, ctx) => {
+    if (!G || !G.cells || !ctx) return;
     if (IsVictory(G.cells)) return { winner: ctx.currentPlayer };
     if (IsDraw(G.cells)) return { draw: true };
   },
 };
 
 function IsVictory(cells) {
+  if (!cells || !Array.isArray(cells) || cells.length < 9) return false;
   const positions = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
   const isRowComplete = (row) => {
-    const symbols = row.map((i) => cells[i]);
+    if (!row || !Array.isArray(row) || row.length < 3) return false;
+    const symbols = row.map((i) => cells[i]).filter(s => s !== undefined);
+    if (symbols.length < 3) return false;
     return symbols[0] !== null && symbols[0] === symbols[1] && symbols[1] === symbols[2];
   };
   return positions.map(isRowComplete).some((r) => r === true);
 }
 
 function IsDraw(cells) {
+  if (!cells || !Array.isArray(cells)) return false;
   return cells.filter((c) => c === null).length === 0;
 }
 
@@ -42,9 +48,10 @@ const Checkers = {
   turn: { minMoves: 1, maxMoves: 1 },
   moves: {
     movePiece: (G, ctx, { from, to }) => {
+      if (!G || !G.cells || !Array.isArray(G.cells) || !ctx || from === undefined || to === undefined) return G;
       const cells = [...G.cells];
       const piece = cells[from];
-      if (piece === null) return G;
+      if (piece === null || piece === undefined) return G;
       cells[from] = null;
       cells[to] = piece;
       const row = Math.floor(to / 8);
@@ -55,6 +62,7 @@ const Checkers = {
     },
   },
   endIf: (G, ctx) => {
+    if (!G || !G.cells || !Array.isArray(G.cells) || !ctx) return;
     const player0Pieces = G.cells.filter((c) => c === 1 || c === 3).length;
     const player1Pieces = G.cells.filter((c) => c === 2 || c === 4).length;
     if (player0Pieces === 0) return { winner: '1' };
@@ -67,6 +75,7 @@ const ConnectFour = {
   turn: { minMoves: 1, maxMoves: 1 },
   moves: {
     dropToken: (G, ctx, col) => {
+      if (!G || !G.cells || !Array.isArray(G.cells) || !ctx || col === undefined) return G;
       const cells = [...G.cells];
       const ROWS = 6;
       const COLS = 7;
@@ -81,19 +90,21 @@ const ConnectFour = {
     },
   },
   endIf: (G, ctx) => {
+    if (!G || !G.cells || !Array.isArray(G.cells) || !ctx) return;
     if (IsConnectFourVictory(G.cells)) return { winner: ctx.currentPlayer };
     if (G.cells.filter((c) => c === null).length === 0) return { draw: true };
   },
 };
 
 function IsConnectFourVictory(cells) {
+  if (!cells || !Array.isArray(cells) || cells.length < 42) return false;
   const ROWS = 6;
   const COLS = 7;
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const index = row * COLS + col;
       const player = cells[index];
-      if (player === null) continue;
+      if (player === null || player === undefined) continue;
       if (col <= COLS - 4 && cells[index] === player && cells[index + 1] === player && cells[index + 2] === player && cells[index + 3] === player) return true;
       if (row <= ROWS - 4 && cells[index] === player && cells[index + COLS] === player && cells[index + COLS * 2] === player && cells[index + COLS * 3] === player) return true;
       if (row <= ROWS - 4 && col <= COLS - 4 && cells[index] === player && cells[index + COLS + 1] === player && cells[index + COLS * 2 + 2] === player && cells[index + COLS * 3 + 3] === player) return true;
@@ -108,15 +119,17 @@ const Chess = {
   turn: { minMoves: 1, maxMoves: 1 },
   moves: {
     movePiece: (G, ctx, { from, to }) => {
+      if (!G || !G.cells || !Array.isArray(G.cells) || !ctx || from === undefined || to === undefined) return G;
       const cells = [...G.cells];
       const piece = cells[from];
-      if (piece === null) return G;
+      if (piece === null || piece === undefined) return G;
       cells[from] = null;
       cells[to] = piece;
       return { ...G, cells };
     },
   },
   endIf: (G, ctx) => {
+    if (!G || !G.cells || !Array.isArray(G.cells) || !ctx) return;
     const whiteKing = G.cells.findIndex((c) => c === 6);
     const blackKing = G.cells.findIndex((c) => c === 12);
     if (whiteKing === -1) return { winner: '1' };

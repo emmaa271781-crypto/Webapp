@@ -154,6 +154,7 @@ const ChessGame = {
 
 const server = Server({
   games: [TicTacToeGame, CheckersGame, ConnectFourGame, ChessGame],
+  origins: ['*'], // Allow all origins (for development/production)
 });
 
 // Export server for integration with main server
