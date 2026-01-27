@@ -5,9 +5,11 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "start:boardgame": "node server-boardgame.js",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:boardgame\"",
     "dev:server": "node server.js",
     "dev:client": "vite",
+    "dev:boardgame": "node server-boardgame.js",
     "prebuild": "node scripts/pre-build.js",
     "build": "vite build && node scripts/post-build.js",
     "preview": "vite preview"
@@ -37,8 +39,8 @@
     "@chatscope/chat-ui-kit-react": "^1.4.0",
     "@chatscope/chat-ui-kit-styles": "^1.4.0",
     "colyseus": "^0.15.0",
-    "colyseus.js": "^0.16.22",
-    "phaser": "^3.80.1"
+    "phaser": "^3.80.1",
+    "boardgame.io": "^0.50.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

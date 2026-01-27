@@ -16,12 +16,16 @@ import { useCall } from './hooks/useCall';
 import JoinOverlay from './components/JoinOverlay';
 import ProfileOverlay from './components/ProfileOverlay';
 import GameCanvas from './components/GameCanvas';
+import BoardGame from './components/BoardGame';
+import GameSelector from './components/GameSelector';
 import CallPanel from './components/CallPanel';
 import CallBanner from './components/CallBanner';
 import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import MessageComposer from './components/MessageComposer';
 import MessageActions from './components/MessageActions';
+import { GameInvite } from './components/GameInvite';
+import { useStreaks } from './hooks/useStreaks';
 import './App.css';
 
 function AppChatScope() {
@@ -32,6 +36,10 @@ function AppChatScope() {
   const [showJoin, setShowJoin] = useState(true);
   const [showProfileOverlay, setShowProfileOverlay] = useState(false);
   const [showGame, setShowGame] = useState(false);
+  const [showGameSelector, setShowGameSelector] = useState(false);
+  const [gameType, setGameType] = useState('pong');
+  const [gameMode, setGameMode] = useState('realtime'); // 'realtime' or 'boardgame'
+  const [playerID, setPlayerID] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
   const [notifyEnabled, setNotifyEnabled] = useState(false);
   
@@ -53,6 +61,43 @@ function AppChatScope() {
     joinCall,
     dismissBanner,
   } = useCall(socket, currentUser);
+  const { dailyStreak, gameWinStreak, totalWins, totalGames, winRate } = useStreaks(socket, currentUser);
+
+  // Load settings from localStorage
+  useEffect(() => {
+    const storedSound = localStorage.getItem('soundEnabled') === 'true';
+    const storedNotify = localStorage.getItem('notifyEnabled') === 'true';
+    setSoundEnabled(storedSound);
+    setNotifyEnabled(storedNotify);
+    
+    // Check notification permission status
+    if (storedNotify && 'Notification' in window && Notification.permission === 'default') {
+      // Permission hasn't been requested yet, but user wants notifications
+      // Will request on first toggle
+    }
+  }, []);
+
+  // Play sound function
+  const playSound = () => {
+    if (!soundEnabled) return;
+    try {
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 660;
+      gain.gain.value = 0.08;
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.15);
+      oscillator.onended = () => {
+        context.close();
+      };
+    } catch (error) {
+      // Ignore sound failures
+    }
+  };
 
   useEffect(() => {
     if (!socket) return;
@@ -78,6 +123,28 @@ function AppChatScope() {
 
     socket.on('message', (msg) => {
       addMessage(msg);
+      
+      // Show notification if enabled and tab is hidden
+      if (notifyEnabled && msg.user !== currentUser && document.hidden && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          const preview = msg.file 
+            ? `[${msg.file.kind || 'file'}] ${msg.file.name || 'attachment'}`
+            : (msg.text || 'New message');
+          
+          new Notification(`${msg.user}`, {
+            body: preview,
+            icon: '/favicon.ico',
+            badge: '/favicon.ico',
+            tag: msg.id, // Prevent duplicate notifications
+            requireInteraction: false,
+          });
+        }
+      }
+      
+      // Play sound if enabled and not from current user
+      if (soundEnabled && msg.user !== currentUser && !document.hidden) {
+        playSound();
+      }
     });
 
     socket.on('message_edit', (data) => {
@@ -101,7 +168,7 @@ function AppChatScope() {
       socket.off('message_delete');
       socket.off('reaction');
     };
-  }, [socket, addMessage, updateMessage, updateReactions]);
+  }, [socket, addMessage, updateMessage, updateReactions, notifyEnabled, soundEnabled, currentUser]);
 
   const handleJoin = (username, password, avatar) => {
     if (socket) {
@@ -118,8 +185,27 @@ function AppChatScope() {
     }
   };
 
-  const toggleSound = () => setSoundEnabled(!soundEnabled);
-  const toggleNotify = () => setNotifyEnabled(!notifyEnabled);
+  const toggleSound = () => {
+    const newValue = !soundEnabled;
+    setSoundEnabled(newValue);
+    localStorage.setItem('soundEnabled', newValue.toString());
+  };
+
+  const toggleNotify = async () => {
+    if (!notifyEnabled && 'Notification' in window) {
+      // Request permission if not granted
+      if (Notification.permission !== 'granted') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          alert('Notifications are blocked. Please enable them in your browser settings.');
+          return;
+        }
+      }
+    }
+    const newValue = !notifyEnabled;
+    setNotifyEnabled(newValue);
+    localStorage.setItem('notifyEnabled', newValue.toString());
+  };
 
   // MessageComposer handles sending, so we don't need handleSend for ChatScope MessageInput
 
@@ -144,14 +230,35 @@ function AppChatScope() {
     );
   }
 
+  const handleGameSelect = (selectedGameType, mode) => {
+    setGameType(selectedGameType);
+    setGameMode(mode);
+    setShowGameSelector(false);
+    if (mode === 'boardgame') {
+      // Assign player ID (0 or 1) - in real implementation, this would come from server
+      setPlayerID('0'); // First player to join
+    }
+    setShowGame(true);
+  };
+
   if (showGame) {
-    return (
-      <GameCanvas
-        socket={socket}
-        currentUser={currentUser}
-        onGameEnd={() => setShowGame(false)}
-      />
-    );
+    if (gameMode === 'boardgame') {
+      return (
+        <BoardGame
+          gameType={gameType}
+          playerID={playerID}
+          onGameEnd={() => {
+            setShowGame(false);
+            setGameType('pong');
+            setGameMode('realtime');
+            setPlayerID(null);
+          }}
+          currentUser={currentUser}
+        />
+      );
+    } else {
+      return <GameCanvas gameType={gameType} onGameEnd={() => setShowGame(false)} socket={socket} currentUser={currentUser} />;
+    }
   }
 
   const typingIndicator = typingUsers.length > 0 ? (
@@ -160,6 +267,20 @@ function AppChatScope() {
 
   return (
     <div className="app" style={{ height: '100vh' }}>
+      <AnimatePresence>
+            {showGameSelector && (
+              <GameSelector
+                onSelect={handleGameSelect}
+                onClose={() => setShowGameSelector(false)}
+                socket={socket}
+                currentUser={currentUser}
+                onSendInvite={({ gameType, gameId }) => {
+                  // Game invite will be sent via socket and appear in chat
+                  console.log('Game invite sent:', gameType, gameId);
+                }}
+              />
+            )}
+      </AnimatePresence>
       <AnimatePresence>
         {showProfileOverlay && (
           <ProfileOverlay
@@ -220,7 +341,7 @@ function AppChatScope() {
                   <ConversationHeader.Content userName="Private Chat Room">
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}>
                       <button
-                        onClick={() => setShowGame(true)}
+                        onClick={() => setShowGameSelector(true)}
                         style={{
                           padding: '0.4rem 0.8rem',
                           marginRight: '0.5rem',
@@ -234,6 +355,11 @@ function AppChatScope() {
                       >
                         🎮 Play Game
                       </button>
+                      {dailyStreak > 0 && (
+                        <span style={{ fontSize: '0.75rem', color: '#4ade80', marginRight: '0.5rem' }}>
+                          🔥 {dailyStreak} day streak
+                        </span>
+                      )}
                       <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>
                         {total} online
                       </span>
@@ -290,6 +416,19 @@ function AppChatScope() {
               let fullMessageContent = messageContent;
               if (msg.replyTo) {
                 fullMessageContent = `↩ ${msg.replyTo.user}: ${msg.replyTo.text?.slice(0, 30) || '(deleted)'}\n${messageContent}`;
+              }
+
+              // Check if this is a game invite - show inline in chat
+              if (msg.gameInvite) {
+                return (
+                  <div key={msg.id} style={{ marginBottom: '0.5rem' }}>
+                    <GameInvite
+                      message={msg}
+                      currentUser={currentUser}
+                      socket={socket}
+                    />
+                  </div>
+                );
               }
 
               return (

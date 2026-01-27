@@ -1,0 +1,61 @@
+.checkers-board {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+}
+
+.checkers-status {
+  font-size: 1.2rem;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.checkers-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 0;
+  width: 480px;
+  height: 480px;
+  border: 2px solid var(--border-color);
+}
+
+.checkers-cell {
+  width: 60px;
+  height: 60px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.checkers-cell.dark {
+  background: var(--bg-message);
+}
+
+.checkers-cell.light {
+  background: var(--bg-secondary);
+}
+
+.checkers-cell:hover:not(:disabled) {
+  opacity: 0.8;
+  transform: scale(1.1);
+}
+
+.checkers-cell.selected {
+  background: var(--accent) !important;
+  opacity: 0.7;
+}
+
+.checkers-cell:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.checkers-piece {
+  font-size: 2rem;
+  color: var(--text-primary);
+}

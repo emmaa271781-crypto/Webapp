@@ -1,0 +1,55 @@
+import React from 'react';
+import './TicTacToeBoard.css';
+
+export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
+  if (!G || !G.cells || !ctx || !moves) {
+    return null;
+  }
+
+  const currentPlayerID = playerID || ctx.playerID || '0';
+  
+  const onClick = (id) => {
+    if (G.cells[id] === null && ctx.currentPlayer === currentPlayerID) {
+      moves.clickCell(id);
+    }
+  };
+
+  const cell = (id) => {
+    const value = G.cells[id];
+    let symbol = '';
+    if (value === '0') symbol = 'X';
+    if (value === '1') symbol = 'O';
+    
+    return (
+      <button
+        key={id}
+        className={`tictactoe-cell ${value !== null ? 'filled' : ''} ${ctx.currentPlayer === currentPlayerID && value === null ? 'clickable' : ''}`}
+        onClick={() => onClick(id)}
+        disabled={value !== null || ctx.currentPlayer !== currentPlayerID}
+      >
+        {symbol}
+      </button>
+    );
+  };
+
+  let status = '';
+  if (ctx.gameover) {
+    if (ctx.gameover.winner !== undefined) {
+      const isWinner = ctx.gameover.winner === currentPlayerID;
+      status = isWinner ? '🎉 You won!' : '😔 You lost';
+    } else if (ctx.gameover.draw) {
+      status = '🤝 Draw!';
+    }
+  } else {
+    status = ctx.currentPlayer === currentPlayerID ? 'Your turn' : "Opponent's turn";
+  }
+
+  return (
+    <div className="tictactoe-board">
+      <div className="tictactoe-status">{status}</div>
+      <div className="tictactoe-grid">
+        {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((id) => cell(id))}
+      </div>
+    </div>
+  );
+}

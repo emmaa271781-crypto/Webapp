@@ -238,15 +238,53 @@ function MessageComposer({ currentUser, socket }) {
       <AnimatePresence>
         {showGif && (
           <GifPanel
-            onSelect={(url) => {
+            onSelect={async (url) => {
               if (socket && currentUser) {
-                socket.emit('message', {
-                  text: url,
-                  replyTo: replyTarget ? { id: replyTarget.id } : null,
-                });
-                setReplyTarget(null);
+                try {
+                  // Fetch the GIF and convert to data URL
+                  const response = await fetch(url);
+                  if (!response.ok) {
+                    throw new Error('Failed to fetch GIF');
+                  }
+                  const blob = await response.blob();
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    // Send as file message (image)
+                    socket.emit('message', {
+                      type: 'file',
+                      replyTo: replyTarget ? { id: replyTarget.id } : null,
+                      file: {
+                        url: reader.result,
+                        name: 'gif.gif',
+                        mime: 'image/gif',
+                        kind: 'image',
+                      },
+                    });
+                    setReplyTarget(null);
+                    setShowGif(false);
+                  };
+                  reader.onerror = () => {
+                    console.error('[MessageComposer] Failed to read GIF');
+                    // Fallback: send as URL if conversion fails
+                    socket.emit('message', {
+                      text: url,
+                      replyTo: replyTarget ? { id: replyTarget.id } : null,
+                    });
+                    setReplyTarget(null);
+                    setShowGif(false);
+                  };
+                  reader.readAsDataURL(blob);
+                } catch (err) {
+                  console.error('[MessageComposer] Error sending GIF:', err);
+                  // Fallback: send as URL
+                  socket.emit('message', {
+                    text: url,
+                    replyTo: replyTarget ? { id: replyTarget.id } : null,
+                  });
+                  setReplyTarget(null);
+                  setShowGif(false);
+                }
               }
-              setShowGif(false);
             }}
             onClose={() => setShowGif(false)}
           />
