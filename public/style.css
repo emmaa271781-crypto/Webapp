@@ -128,16 +128,6 @@ body {
   cursor: not-allowed;
 }
 
-.call-ended {
-  margin: 0.6rem 1.5rem 0;
-  padding: 0.6rem 0.9rem;
-  border-radius: var(--radius-sm);
-  background: rgba(59, 130, 246, 0.12);
-  border: 1px solid rgba(59, 130, 246, 0.3);
-  color: #bfdbfe;
-  font-size: 0.85rem;
-}
-
 .call-banner {
   margin: 0.6rem 1.5rem 0;
   display: flex;

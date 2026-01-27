@@ -35,7 +35,6 @@ const callStartButton = document.getElementById("call-start");
 const callEndButton = document.getElementById("call-end");
 const callJoinButton = document.getElementById("call-join");
 const callDismissButton = document.getElementById("call-dismiss");
-const callEndedBanner = document.getElementById("call-ended");
 const callBanner = document.getElementById("call-banner");
 const callBannerText = document.getElementById("call-banner-text");
 const callPanel = document.getElementById("call-panel");
@@ -387,7 +386,6 @@ const ensurePeer = (initiator) => {
   peer.on("connect", () => {
     setCallStatus("Connected");
     reconnectAttempts = 0;
-    callConnectedAt = Date.now();
     restartInProgress = false;
     lastStateChangeAt = Date.now();
   });
@@ -639,11 +637,6 @@ const startCall = () => {
   }
   prepareAudioContext();
   loadIceServers();
-  callStartedAt = Date.now();
-  callConnectedAt = null;
-  if (callEndedBanner) {
-    callEndedBanner.classList.add("hidden");
-  }
   socket.emit("call_join");
   ensureAudioPlayback();
 };
@@ -666,21 +659,6 @@ const endCall = () => {
   isCameraOn = false;
   isScreenSharing = false;
   callSessionId = null;
-  if (callStartedAt) {
-    const endedAt = Date.now();
-    const duration = formatDuration(endedAt - (callConnectedAt || callStartedAt));
-    const endedText = `Call ended • ${duration}`;
-    addSystemMessage(endedText);
-    if (callEndedBanner) {
-      callEndedBanner.textContent = endedText;
-      callEndedBanner.classList.remove("hidden");
-      setTimeout(() => {
-        callEndedBanner.classList.add("hidden");
-      }, 6000);
-    }
-  }
-  callStartedAt = null;
-  callConnectedAt = null;
   updateLocalVideo();
   updateRemoteVideo();
   if (remoteStatus) remoteStatus.textContent = "Waiting for peer";
@@ -703,8 +681,6 @@ let isAtBottom = true;
 let replyTarget = null;
 let editTargetId = null;
 let pendingFile = null;
-let callStartedAt = null;
-let callConnectedAt = null;
 
 const formatTime = (isoString) => {
   const date = new Date(isoString);
@@ -712,17 +688,6 @@ const formatTime = (isoString) => {
     return "";
   }
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-};
-
-const formatDuration = (ms) => {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 };
 
 const isGifUrl = (text) => {
@@ -1505,9 +1470,6 @@ socket.on("call_joined", (payload) => {
   callRole = payload?.role || "caller";
   remotePeerId = payload?.peerId || null;
   callSessionId = payload?.sessionId || callSessionId;
-  if (!callStartedAt) {
-    callStartedAt = Date.now();
-  }
   showCallPanel(true);
   showCallBanner(false);
   lastStateChangeAt = Date.now();
