@@ -20,6 +20,8 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const remoteStreamRef = useRef(null);
   const pendingSignalsRef = useRef([]);
   const reconnectAttemptsRef = useRef(0);
+  const silentStreamRef = useRef(null);
+  const hasTurnRef = useRef(false);
   const iceServersRef = useRef([
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -40,6 +42,10 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         const data = await response.json();
         if (!cancelled && Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
           iceServersRef.current = data.iceServers;
+          hasTurnRef.current = data.iceServers.some((server) => {
+            const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+            return urls.some((url) => typeof url === 'string' && url.startsWith('turn'));
+          });
         }
       } catch (err) {
         // Keep default STUN servers on failure.
@@ -56,6 +62,34 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     if (connectionHealthRef.current) {
       clearInterval(connectionHealthRef.current);
       connectionHealthRef.current = null;
+    }
+  }, []);
+
+  const ensureSilentStream = useCallback(() => {
+    if (silentStreamRef.current) {
+      return silentStreamRef.current;
+    }
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        return null;
+      }
+      const audioContext = new AudioContextClass();
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {});
+      }
+      const oscillator = audioContext.createOscillator();
+      const destination = audioContext.createMediaStreamDestination();
+      oscillator.connect(destination);
+      oscillator.start();
+      const track = destination.stream.getAudioTracks()[0];
+      if (track) {
+        track.enabled = false;
+      }
+      silentStreamRef.current = destination.stream;
+      return silentStreamRef.current;
+    } catch (err) {
+      return null;
     }
   }, []);
 
@@ -169,7 +203,9 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       return null;
     }
 
-    const stream = localStreamRef.current || new MediaStream();
+    const activeStream = localStreamRef.current && localStreamRef.current.getTracks().length > 0
+      ? localStreamRef.current
+      : ensureSilentStream();
     
     const iceServers = Array.isArray(iceServersRef.current) && iceServersRef.current.length > 0
       ? iceServersRef.current
@@ -178,10 +214,11 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     const peer = new window.SimplePeer({
       initiator: Boolean(initiator),
       trickle: true,
-      stream: stream.getTracks().length > 0 ? stream : undefined,
+      stream: activeStream || undefined,
       config: {
         iceServers,
         iceCandidatePoolSize: 10, // Pre-gather more candidates
+        iceTransportPolicy: hasTurnRef.current ? 'relay' : 'all',
       },
       // Better browser compatibility
       sdpTransform: (sdp) => {
@@ -396,10 +433,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
           }
         });
         // Trigger renegotiation for callee
-        if (callRole !== 'caller' && peerRef.current.negotiate) {
+        if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+          const activePeer = peerRef.current;
           setTimeout(() => {
+            if (!peerRef.current || peerRef.current !== activePeer || activePeer.destroyed) {
+              return;
+            }
             try {
-              peerRef.current.negotiate();
+              activePeer.negotiate();
             } catch (err) {
               console.warn('[WebRTC] Error negotiating:', err);
             }
@@ -450,10 +491,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
                 localStreamRef.current.addTrack(newAudioTrack);
                 peerRef.current.addTrack(newAudioTrack, localStreamRef.current);
               }
-              if (callRole !== 'caller' && peerRef.current.negotiate) {
+              if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+                const activePeer = peerRef.current;
                 setTimeout(() => {
+                  if (!peerRef.current || peerRef.current !== activePeer || activePeer.destroyed) {
+                    return;
+                  }
                   try {
-                    peerRef.current.negotiate();
+                    activePeer.negotiate();
                   } catch (err) {
                     console.warn('[WebRTC] Negotiate error:', err);
                   }
@@ -506,8 +551,12 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
             } else {
               peerRef.current.addTrack(videoTrack, localStreamRef.current);
             }
-            if (callRole !== 'caller' && peerRef.current.negotiate) {
-              peerRef.current.negotiate();
+            if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+              try {
+                peerRef.current.negotiate();
+              } catch (err) {
+                console.warn('[WebRTC] Negotiate error:', err);
+              }
             }
           }
         }
@@ -577,8 +626,12 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
           setIsCameraEnabled(false);
         }
 
-        if (callRole !== 'caller' && peerRef.current?.negotiate) {
-          peerRef.current.negotiate();
+        if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+          try {
+            peerRef.current.negotiate();
+          } catch (err) {
+            console.warn('[WebRTC] Negotiate error:', err);
+          }
         }
       } catch (err) {
         console.error('[WebRTC] Error sharing screen:', err);
@@ -606,6 +659,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         destroyPeer();
       }
       
+      ensureSilentStream();
       setIsMicMuted(true);
       const peer = initPeer(callRole === 'caller');
       if (peer) {
@@ -630,8 +684,12 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       setIsMicMuted(true);
       setIsCameraEnabled(false);
       setIsScreenSharing(false);
+      if (silentStreamRef.current) {
+        silentStreamRef.current.getTracks().forEach((track) => track.stop());
+        silentStreamRef.current = null;
+      }
     }
-  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream]);
+  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream, ensureSilentStream]);
 
   useEffect(() => {
     if (!socket) return;
@@ -640,6 +698,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       if (!isInCall) return;
       console.log('[WebRTC] Received call_restart, reinitializing peer');
       destroyPeer();
+      ensureSilentStream();
       const peer = initPeer(callRole === 'caller');
       if (peer) {
         setTimeout(() => {
@@ -653,7 +712,7 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
     return () => {
       socket.off('call_restart', handleRestart);
     };
-  }, [socket, isInCall, callRole, initPeer, destroyPeer, flushPendingSignals]);
+  }, [socket, isInCall, callRole, initPeer, destroyPeer, flushPendingSignals, ensureSilentStream]);
 
   // Handle WebRTC signals from server
   useEffect(() => {
@@ -665,11 +724,18 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         console.warn('[WebRTC] Signal missing signal data:', payload);
         return;
       }
+      if (payload?.from && remotePeerId && payload.from !== remotePeerId) {
+        console.warn('[WebRTC] Ignoring signal from unknown peer:', payload.from);
+        return;
+      }
       
       // If peer doesn't exist yet, queue the signal
-      if (!peerRef.current) {
+      if (!peerRef.current || peerRef.current.destroyed) {
         console.log('[WebRTC] Peer not ready, queuing signal');
         pendingSignalsRef.current.push(payload.signal);
+        if (pendingSignalsRef.current.length > 200) {
+          pendingSignalsRef.current.shift();
+        }
         // Try to initialize peer if we have remotePeerId
         if (remotePeerId && isInCall) {
           console.log('[WebRTC] Initializing peer from signal handler');
