@@ -31,6 +31,47 @@ body {
   font-size: 1.25rem;
 }
 
+.top-left {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.header-button {
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  color: #111827;
+  padding: 0.45rem 0.85rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.header-button.primary {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #ffffff;
+}
+
+.header-button.danger {
+  border-color: #dc2626;
+  background: #dc2626;
+  color: #ffffff;
+}
+
+.header-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -48,6 +89,129 @@ body {
 .status-pill.status-offline {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.call-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  margin: 0.75rem 1.5rem 0;
+  border-radius: 0.8rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.call-banner-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.call-banner-text {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.call-banner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.call-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.75rem 1.5rem 0;
+  padding: 1rem 1.25rem;
+  border-radius: 0.8rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+
+.call-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+
+.call-status {
+  font-weight: 600;
+  color: #111827;
+}
+
+.call-quality {
+  font-size: 0.8rem;
+  color: #6b7280;
+}
+
+.call-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+}
+
+.call-tile {
+  border: 1px solid #e5e7eb;
+  border-radius: 0.75rem;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: #f9fafb;
+}
+
+.call-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #374151;
+}
+
+.call-media {
+  position: relative;
+  width: 100%;
+  height: 180px;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: #0f172a;
+}
+
+.call-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.call-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e2e8f0;
+  font-size: 0.85rem;
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.call-substatus {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+.call-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .chat {
@@ -188,6 +352,24 @@ body {
   .top-bar {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .top-actions {
+    width: 100%;
+  }
+
+  .call-banner,
+  .call-panel {
+    margin: 0.75rem 1rem 0;
+  }
+
+  .call-panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .call-media {
+    height: 160px;
   }
 
   .message {

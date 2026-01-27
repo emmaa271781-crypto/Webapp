@@ -9,9 +9,57 @@
   <body>
     <div class="app">
       <header class="top-bar">
-        <h1>Classroom Chat</h1>
-        <span id="connection-status" class="status-pill">Connecting...</span>
+        <div class="top-left">
+          <h1>Classroom Chat</h1>
+          <span id="connection-status" class="status-pill">Connecting...</span>
+        </div>
+        <div class="top-actions">
+          <button id="call-start" class="header-button">Start Call</button>
+          <button id="call-end" class="header-button danger" disabled>End Call</button>
+        </div>
       </header>
+
+      <section id="call-banner" class="call-banner hidden">
+        <div>
+          <div class="call-banner-title">Incoming call</div>
+          <div id="call-banner-text" class="call-banner-text">Someone started a call.</div>
+        </div>
+        <div class="call-banner-actions">
+          <button id="call-join" class="header-button primary">Join Call</button>
+          <button id="call-dismiss" class="header-button">Dismiss</button>
+        </div>
+      </section>
+
+      <section id="call-panel" class="call-panel hidden">
+        <div class="call-panel-header">
+          <div id="call-status" class="call-status">Call idle</div>
+          <div id="call-quality" class="call-quality">Quality: -</div>
+        </div>
+        <div class="call-grid">
+          <div class="call-tile">
+            <div id="local-label" class="call-label">You</div>
+            <div class="call-media">
+              <video id="local-video" class="call-video hidden" autoplay muted playsinline></video>
+              <div id="local-placeholder" class="call-placeholder">Camera off</div>
+            </div>
+            <div id="local-status" class="call-substatus">Mic muted</div>
+          </div>
+          <div class="call-tile">
+            <div id="remote-label" class="call-label">Remote</div>
+            <div class="call-media">
+              <video id="remote-video" class="call-video hidden" autoplay playsinline></video>
+              <audio id="remote-audio" autoplay></audio>
+              <div id="remote-placeholder" class="call-placeholder">Waiting for video</div>
+            </div>
+            <div id="remote-status" class="call-substatus">Waiting for peer</div>
+          </div>
+        </div>
+        <div class="call-actions">
+          <button id="toggle-mic" class="header-button">Mic</button>
+          <button id="toggle-cam" class="header-button">Camera</button>
+          <button id="toggle-share" class="header-button">Share Screen</button>
+        </div>
+      </section>
 
       <main class="chat">
         <ul id="messages" class="messages"></ul>
@@ -53,6 +101,7 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
