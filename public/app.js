@@ -1,6 +1,8 @@
 const socket = io();
 
 const messagesList = document.getElementById("messages");
+const chatScroll = document.getElementById("chat-scroll");
+const jumpLatestButton = document.getElementById("jump-latest");
 const form = document.getElementById("message-form");
 const input = document.getElementById("message-input");
 const statusPill = document.getElementById("connection-status");
@@ -9,10 +11,31 @@ const joinForm = document.getElementById("join-form");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const joinError = document.getElementById("join-error");
+const replyBanner = document.getElementById("reply-banner");
+const replyText = document.getElementById("reply-text");
+const replyCancel = document.getElementById("reply-cancel");
+const editBanner = document.getElementById("edit-banner");
+const editText = document.getElementById("edit-text");
+const editCancel = document.getElementById("edit-cancel");
+const fileBanner = document.getElementById("file-banner");
+const fileName = document.getElementById("file-name");
+const fileCancel = document.getElementById("file-cancel");
+const emojiToggle = document.getElementById("emoji-toggle");
+const gifToggle = document.getElementById("gif-toggle");
+const attachToggle = document.getElementById("attach-toggle");
+const emojiPanel = document.getElementById("emoji-panel");
+const gifPanel = document.getElementById("gif-panel");
+const gifInput = document.getElementById("gif-input");
+const gifSearchButton = document.getElementById("gif-search");
+const gifResults = document.getElementById("gif-results");
+const gifError = document.getElementById("gif-error");
+const fileInput = document.getElementById("file-input");
+const composerError = document.getElementById("composer-error");
 const callStartButton = document.getElementById("call-start");
 const callEndButton = document.getElementById("call-end");
 const callJoinButton = document.getElementById("call-join");
 const callDismissButton = document.getElementById("call-dismiss");
+const callEndedBanner = document.getElementById("call-ended");
 const callBanner = document.getElementById("call-banner");
 const callBannerText = document.getElementById("call-banner-text");
 const callPanel = document.getElementById("call-panel");
@@ -30,6 +53,14 @@ const toggleCamButton = document.getElementById("toggle-cam");
 const toggleShareButton = document.getElementById("toggle-share");
 const localLabel = document.getElementById("local-label");
 const remoteLabel = document.getElementById("remote-label");
+const gameToggle = document.getElementById("game-toggle");
+const gameOverlay = document.getElementById("game-overlay");
+const gameClose = document.getElementById("game-close");
+const gameCanvas = document.getElementById("game-canvas");
+const gameStatus = document.getElementById("game-status");
+const gameScore = document.getElementById("game-score");
+const gameUp = document.getElementById("game-up");
+const gameDown = document.getElementById("game-down");
 
 let currentUser = "";
 let isInCall = false;
@@ -60,6 +91,12 @@ let iceServers = [
   { urls: "stun:stun4.l.google.com:19302" },
 ];
 const maxReconnectAttempts = 3;
+let gameState = null;
+let gameSide = null;
+let gameActive = false;
+let gameInputDir = 0;
+let gameRenderId = null;
+const gameContext = gameCanvas ? gameCanvas.getContext("2d") : null;
 
 const setStatus = (label, type) => {
   statusPill.textContent = label;
@@ -350,6 +387,7 @@ const ensurePeer = (initiator) => {
   peer.on("connect", () => {
     setCallStatus("Connected");
     reconnectAttempts = 0;
+    callConnectedAt = Date.now();
     restartInProgress = false;
     lastStateChangeAt = Date.now();
   });
@@ -601,6 +639,11 @@ const startCall = () => {
   }
   prepareAudioContext();
   loadIceServers();
+  callStartedAt = Date.now();
+  callConnectedAt = null;
+  if (callEndedBanner) {
+    callEndedBanner.classList.add("hidden");
+  }
   socket.emit("call_join");
   ensureAudioPlayback();
 };
@@ -623,6 +666,21 @@ const endCall = () => {
   isCameraOn = false;
   isScreenSharing = false;
   callSessionId = null;
+  if (callStartedAt) {
+    const endedAt = Date.now();
+    const duration = formatDuration(endedAt - (callConnectedAt || callStartedAt));
+    const endedText = `Call ended • ${duration}`;
+    addSystemMessage(endedText);
+    if (callEndedBanner) {
+      callEndedBanner.textContent = endedText;
+      callEndedBanner.classList.remove("hidden");
+      setTimeout(() => {
+        callEndedBanner.classList.add("hidden");
+      }, 6000);
+    }
+  }
+  callStartedAt = null;
+  callConnectedAt = null;
   updateLocalVideo();
   updateRemoteVideo();
   if (remoteStatus) remoteStatus.textContent = "Waiting for peer";
@@ -638,6 +696,16 @@ const endCall = () => {
   }
 };
 
+const messagesById = new Map();
+const messageNodes = new Map();
+const emojiOptions = ["👍", "❤️", "😂", "😮", "😢", "🎉", "🔥", "👏"];
+let isAtBottom = true;
+let replyTarget = null;
+let editTargetId = null;
+let pendingFile = null;
+let callStartedAt = null;
+let callConnectedAt = null;
+
 const formatTime = (isoString) => {
   const date = new Date(isoString);
   if (Number.isNaN(date.getTime())) {
@@ -646,21 +714,102 @@ const formatTime = (isoString) => {
   return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
+const formatDuration = (ms) => {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+};
+
+const isGifUrl = (text) => {
+  if (!text) return false;
+  const value = text.toLowerCase();
+  return value.includes(".gif") || value.includes("giphy.com/media/");
+};
+
 const scrollToBottom = () => {
-  messagesList.scrollTop = messagesList.scrollHeight;
+  if (!chatScroll) return;
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+  updateScrollState();
 };
 
-const addSystemMessage = (text) => {
-  const item = document.createElement("li");
-  item.className = "message system";
-  item.textContent = text;
-  messagesList.appendChild(item);
-  scrollToBottom();
+const updateScrollState = () => {
+  if (!chatScroll) return;
+  const distance = chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight;
+  isAtBottom = distance < 140;
+  if (jumpLatestButton) {
+    jumpLatestButton.classList.toggle("hidden", isAtBottom);
+  }
 };
 
-const addChatMessage = (message) => {
+const showComposerError = (message) => {
+  if (!composerError) return;
+  composerError.textContent = message || "";
+};
+
+const updateReplyBanner = () => {
+  if (!replyBanner) return;
+  if (!replyTarget) {
+    replyBanner.classList.add("hidden");
+    return;
+  }
+  replyBanner.classList.remove("hidden");
+  if (replyText) {
+    replyText.textContent = `${replyTarget.user}: ${replyTarget.text || ""}`.slice(0, 80);
+  }
+};
+
+const updateEditBanner = () => {
+  if (!editBanner) return;
+  if (!editTargetId) {
+    editBanner.classList.add("hidden");
+    return;
+  }
+  const target = messagesById.get(editTargetId);
+  editBanner.classList.remove("hidden");
+  if (editText) {
+    editText.textContent = target?.text?.slice(0, 80) || "message";
+  }
+};
+
+const updateFileBanner = () => {
+  if (!fileBanner) return;
+  if (!pendingFile) {
+    fileBanner.classList.add("hidden");
+    return;
+  }
+  fileBanner.classList.remove("hidden");
+  if (fileName) {
+    fileName.textContent = pendingFile.name || "attachment";
+  }
+};
+
+const clearReplyTarget = () => {
+  replyTarget = null;
+  updateReplyBanner();
+};
+
+const clearEditTarget = () => {
+  editTargetId = null;
+  updateEditBanner();
+};
+
+const clearPendingFile = () => {
+  pendingFile = null;
+  updateFileBanner();
+  if (fileInput) {
+    fileInput.value = "";
+  }
+};
+
+const renderMessage = (message) => {
   const item = document.createElement("li");
   item.className = "message";
+  item.dataset.id = message.id;
   if (message.user === currentUser) {
     item.classList.add("self");
   }
@@ -670,7 +819,7 @@ const addChatMessage = (message) => {
 
   const user = document.createElement("span");
   user.className = "message-user";
-  user.textContent = message.user;
+  user.textContent = message.user || "User";
 
   const time = document.createElement("span");
   time.className = "message-time";
@@ -678,15 +827,284 @@ const addChatMessage = (message) => {
 
   meta.appendChild(user);
   meta.appendChild(time);
-
-  const text = document.createElement("p");
-  text.className = "message-text";
-  text.textContent = message.text;
+  if (message.edited) {
+    const edited = document.createElement("span");
+    edited.className = "edited-label";
+    edited.textContent = "(edited)";
+    meta.appendChild(edited);
+  }
 
   item.appendChild(meta);
-  item.appendChild(text);
+
+  if (message.replyTo) {
+    const reply = document.createElement("div");
+    reply.className = "reply-preview";
+    reply.innerHTML = `<strong>${message.replyTo.user}</strong> ${message.replyTo.text}`;
+    item.appendChild(reply);
+  }
+
+  if (message.deleted) {
+    const deleted = document.createElement("p");
+    deleted.className = "message-text";
+    deleted.textContent = "(message deleted)";
+    item.appendChild(deleted);
+  } else if (message.type === "file" && message.file) {
+    const mediaWrap = document.createElement("div");
+    mediaWrap.className = "message-media";
+    if (message.file.kind === "video") {
+      const video = document.createElement("video");
+      video.controls = true;
+      video.src = message.file.url;
+      mediaWrap.appendChild(video);
+    } else {
+      const img = document.createElement("img");
+      img.src = message.file.url;
+      img.alt = message.file.name || "attachment";
+      mediaWrap.appendChild(img);
+    }
+    item.appendChild(mediaWrap);
+  } else if (isGifUrl(message.text)) {
+    const mediaWrap = document.createElement("div");
+    mediaWrap.className = "message-media";
+    const gif = document.createElement("img");
+    gif.src = message.text;
+    gif.alt = "gif";
+    mediaWrap.appendChild(gif);
+    item.appendChild(mediaWrap);
+  } else {
+    const text = document.createElement("p");
+    text.className = "message-text";
+    text.textContent = message.text || "";
+    item.appendChild(text);
+  }
+
+  if (!message.deleted) {
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    const replyButton = document.createElement("button");
+    replyButton.className = "action-button";
+    replyButton.textContent = "Reply";
+    replyButton.addEventListener("click", () => {
+      replyTarget = { id: message.id, user: message.user, text: message.text || "" };
+      updateReplyBanner();
+      input.focus();
+    });
+    actions.appendChild(replyButton);
+
+    const reactButton = document.createElement("button");
+    reactButton.className = "action-button";
+    reactButton.textContent = "React";
+    actions.appendChild(reactButton);
+
+    if (message.senderId === socket.id && message.type === "text") {
+      const editButton = document.createElement("button");
+      editButton.className = "action-button";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", () => {
+        editTargetId = message.id;
+        input.value = message.text || "";
+        updateEditBanner();
+        input.focus();
+      });
+      actions.appendChild(editButton);
+    }
+
+    if (message.senderId === socket.id) {
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "action-button danger";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", () => {
+        socket.emit("delete_message", { messageId: message.id });
+      });
+      actions.appendChild(deleteButton);
+    }
+
+    item.appendChild(actions);
+
+    const reactions = message.reactions || {};
+    const reactionEntries = Object.entries(reactions);
+    if (reactionEntries.length) {
+      const reactionBar = document.createElement("div");
+      reactionBar.className = "reaction-bar";
+      reactionEntries.forEach(([emoji, users]) => {
+        const button = document.createElement("button");
+        button.className = "reaction-button";
+        if (Array.isArray(users) && users.includes(currentUser)) {
+          button.classList.add("active");
+        }
+        button.textContent = `${emoji} ${users.length}`;
+        button.addEventListener("click", () => {
+          socket.emit("react", { messageId: message.id, emoji });
+        });
+        reactionBar.appendChild(button);
+      });
+      item.appendChild(reactionBar);
+    }
+
+    const picker = document.createElement("div");
+    picker.className = "reaction-picker hidden";
+    emojiOptions.forEach((emoji) => {
+      const button = document.createElement("button");
+      button.textContent = emoji;
+      button.addEventListener("click", () => {
+        socket.emit("react", { messageId: message.id, emoji });
+        picker.classList.add("hidden");
+      });
+      picker.appendChild(button);
+    });
+    item.appendChild(picker);
+    reactButton.addEventListener("click", () => {
+      picker.classList.toggle("hidden");
+    });
+  }
+
+  return item;
+};
+
+const upsertMessage = (message) => {
+  if (!message?.id) return;
+  if (editTargetId === message.id && message.deleted) {
+    clearEditTarget();
+  }
+  messagesById.set(message.id, message);
+  const existing = messageNodes.get(message.id);
+  const next = renderMessage(message);
+  if (existing) {
+    existing.replaceWith(next);
+  } else {
+    messagesList.appendChild(next);
+  }
+  messageNodes.set(message.id, next);
+  if (isAtBottom) {
+    scrollToBottom();
+  } else if (jumpLatestButton) {
+    jumpLatestButton.classList.remove("hidden");
+  }
+};
+
+const addSystemMessage = (text) => {
+  const item = document.createElement("li");
+  item.className = "message system";
+  item.textContent = text;
   messagesList.appendChild(item);
-  scrollToBottom();
+  if (isAtBottom) {
+    scrollToBottom();
+  } else if (jumpLatestButton) {
+    jumpLatestButton.classList.remove("hidden");
+  }
+};
+
+const buildEmojiPanel = () => {
+  if (!emojiPanel) return;
+  emojiPanel.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "emoji-grid";
+  emojiOptions.forEach((emoji) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = emoji;
+    button.addEventListener("click", () => {
+      input.value += emoji;
+      input.focus();
+    });
+    grid.appendChild(button);
+  });
+  emojiPanel.appendChild(grid);
+};
+
+const renderGame = () => {
+  if (!gameContext || !gameState) return;
+  const width = gameState.width || 800;
+  const height = gameState.height || 500;
+  if (gameCanvas && (gameCanvas.width !== width || gameCanvas.height !== height)) {
+    gameCanvas.width = width;
+    gameCanvas.height = height;
+  }
+  gameContext.fillStyle = "#0b1117";
+  gameContext.fillRect(0, 0, width, height);
+  gameContext.strokeStyle = "#1f2a3a";
+  gameContext.setLineDash([8, 8]);
+  gameContext.beginPath();
+  gameContext.moveTo(width / 2, 0);
+  gameContext.lineTo(width / 2, height);
+  gameContext.stroke();
+  gameContext.setLineDash([]);
+
+  const left = gameState.players?.find((player) => player.side === "left");
+  const right = gameState.players?.find((player) => player.side === "right");
+  const paddleWidth = 14;
+  const paddleHeight = 90;
+  gameContext.fillStyle = "#4ade80";
+  if (left) {
+    gameContext.fillRect(40 - paddleWidth / 2, left.y - paddleHeight / 2, paddleWidth, paddleHeight);
+  }
+  if (right) {
+    gameContext.fillRect(width - 40 - paddleWidth / 2, right.y - paddleHeight / 2, paddleWidth, paddleHeight);
+  }
+
+  if (gameState.ball) {
+    gameContext.fillStyle = "#e5e7eb";
+    gameContext.beginPath();
+    gameContext.arc(gameState.ball.x, gameState.ball.y, 8, 0, Math.PI * 2);
+    gameContext.fill();
+  }
+};
+
+const startGameRender = () => {
+  if (!gameActive) return;
+  renderGame();
+  gameRenderId = requestAnimationFrame(startGameRender);
+};
+
+const stopGameRender = () => {
+  if (gameRenderId) {
+    cancelAnimationFrame(gameRenderId);
+    gameRenderId = null;
+  }
+};
+
+const updateGameStatus = (text) => {
+  if (gameStatus) {
+    gameStatus.textContent = text;
+  }
+};
+
+const updateGameScore = () => {
+  if (!gameScore || !gameState) return;
+  const left = gameState.players?.find((player) => player.side === "left");
+  const right = gameState.players?.find((player) => player.side === "right");
+  const leftName = left?.name || "Waiting";
+  const rightName = right?.name || "Waiting";
+  gameScore.textContent = `${leftName} ${gameState.scores?.left || 0} : ${gameState.scores?.right || 0} ${rightName}`;
+};
+
+const sendGameInput = (dir) => {
+  if (!socket || !gameActive) return;
+  if (gameInputDir === dir) return;
+  gameInputDir = dir;
+  socket.emit("game_input", { dir });
+};
+
+const openGame = () => {
+  if (!socket || !currentUser || !gameOverlay) return;
+  gameOverlay.classList.remove("hidden");
+  gameActive = true;
+  gameSide = null;
+  updateGameStatus("Connecting...");
+  socket.emit("game_join", { name: currentUser });
+  startGameRender();
+};
+
+const closeGame = () => {
+  if (!gameOverlay) return;
+  gameOverlay.classList.add("hidden");
+  gameActive = false;
+  sendGameInput(0);
+  socket.emit("game_leave");
+  gameState = null;
+  gameSide = null;
+  updateGameStatus("Connecting...");
+  stopGameRender();
 };
 
 const setJoinError = (message) => {
@@ -729,12 +1147,202 @@ form.addEventListener("submit", (event) => {
     openOverlay();
     return;
   }
+  if (editTargetId) {
+    if (text) {
+      socket.emit("edit_message", { messageId: editTargetId, text });
+      clearEditTarget();
+      input.value = "";
+    }
+    return;
+  }
+  if (pendingFile) {
+    socket.emit("message", {
+      type: "file",
+      file: pendingFile,
+      replyTo: replyTarget ? { id: replyTarget.id } : null,
+    });
+    clearPendingFile();
+    clearReplyTarget();
+    input.value = "";
+    return;
+  }
   if (!text) {
     return;
   }
-  socket.emit("message", { text });
+  socket.emit("message", {
+    text,
+    replyTo: replyTarget ? { id: replyTarget.id } : null,
+  });
+  clearReplyTarget();
   input.value = "";
   input.focus();
+});
+
+if (replyCancel) {
+  replyCancel.addEventListener("click", clearReplyTarget);
+}
+if (editCancel) {
+  editCancel.addEventListener("click", clearEditTarget);
+}
+if (fileCancel) {
+  fileCancel.addEventListener("click", clearPendingFile);
+}
+if (jumpLatestButton) {
+  jumpLatestButton.addEventListener("click", () => {
+    scrollToBottom();
+    updateScrollState();
+  });
+}
+if (chatScroll) {
+  chatScroll.addEventListener("scroll", updateScrollState);
+}
+
+if (input) {
+  input.addEventListener("input", () => {
+    showComposerError("");
+  });
+}
+
+if (emojiToggle) {
+  buildEmojiPanel();
+  emojiToggle.addEventListener("click", () => {
+    emojiPanel.classList.toggle("hidden");
+    if (gifPanel) gifPanel.classList.add("hidden");
+  });
+}
+
+if (gifToggle) {
+  gifToggle.addEventListener("click", () => {
+    gifPanel.classList.toggle("hidden");
+    if (emojiPanel) emojiPanel.classList.add("hidden");
+  });
+}
+
+if (attachToggle && fileInput) {
+  attachToggle.addEventListener("click", () => {
+    fileInput.click();
+  });
+}
+
+if (fileInput) {
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      showComposerError("Only images or videos are allowed.");
+      clearPendingFile();
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result || "");
+      if (!url.startsWith("data:") || url.length > 4_500_000) {
+        showComposerError("Attachment too large.");
+        clearPendingFile();
+        return;
+      }
+      pendingFile = {
+        url,
+        name: file.name || "attachment",
+        mime: file.type,
+        kind: file.type.startsWith("video") ? "video" : "image",
+      };
+      showComposerError("");
+      updateFileBanner();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+const runGifSearch = async () => {
+  const query = gifInput?.value.trim();
+  if (!query) return;
+  if (gifError) gifError.textContent = "";
+  if (gifResults) gifResults.innerHTML = "";
+  try {
+    const response = await fetch(`/api/gifs?q=${encodeURIComponent(query)}`);
+    const data = await response.json();
+    if (!response.ok) {
+      if (gifError) gifError.textContent = data?.error || "GIF search failed.";
+      return;
+    }
+    if (!Array.isArray(data.results)) return;
+    data.results.forEach((gif) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      const img = document.createElement("img");
+      img.src = gif.preview || gif.url;
+      img.alt = "gif";
+      button.appendChild(img);
+      button.addEventListener("click", () => {
+        socket.emit("message", {
+          text: gif.url,
+          replyTo: replyTarget ? { id: replyTarget.id } : null,
+        });
+        clearReplyTarget();
+        if (gifPanel) gifPanel.classList.add("hidden");
+        if (gifInput) gifInput.value = "";
+      });
+      gifResults.appendChild(button);
+    });
+  } catch (err) {
+    if (gifError) gifError.textContent = "GIF search failed.";
+  }
+};
+
+if (gifSearchButton) {
+  gifSearchButton.addEventListener("click", runGifSearch);
+}
+if (gifInput) {
+  gifInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      runGifSearch();
+    }
+  });
+}
+
+if (gameToggle) {
+  gameToggle.addEventListener("click", () => {
+    if (gameOverlay?.classList.contains("hidden")) {
+      openGame();
+    } else {
+      closeGame();
+    }
+  });
+}
+
+if (gameClose) {
+  gameClose.addEventListener("click", closeGame);
+}
+
+if (gameUp) {
+  gameUp.addEventListener("pointerdown", () => sendGameInput(-1));
+  gameUp.addEventListener("pointerup", () => sendGameInput(0));
+  gameUp.addEventListener("pointerleave", () => sendGameInput(0));
+}
+
+if (gameDown) {
+  gameDown.addEventListener("pointerdown", () => sendGameInput(1));
+  gameDown.addEventListener("pointerup", () => sendGameInput(0));
+  gameDown.addEventListener("pointerleave", () => sendGameInput(0));
+}
+
+window.addEventListener("keydown", (event) => {
+  if (!gameActive) return;
+  if (event.key === "ArrowUp" || event.key.toLowerCase() === "w") {
+    sendGameInput(-1);
+  }
+  if (event.key === "ArrowDown" || event.key.toLowerCase() === "s") {
+    sendGameInput(1);
+  }
+});
+
+window.addEventListener("keyup", (event) => {
+  if (!gameActive) return;
+  if (["ArrowUp", "ArrowDown", "w", "s"].includes(event.key.toLowerCase())) {
+    sendGameInput(0);
+  }
 });
 
 if (callStartButton) {
@@ -795,6 +1403,9 @@ socket.on("auth_ok", (payload) => {
   }
   closeOverlay();
   setJoinError("");
+  if (messagesById.size) {
+    messagesById.forEach((message) => upsertMessage(message));
+  }
 });
 
 socket.on("auth_error", (message) => {
@@ -806,19 +1417,68 @@ socket.on("auth_error", (message) => {
 
 socket.on("history", (messages) => {
   messagesList.innerHTML = "";
+  messagesById.clear();
+  messageNodes.clear();
   if (!messages.length) {
     addSystemMessage("No messages yet. Start the conversation!");
     return;
   }
-  messages.forEach(addChatMessage);
+  messages.forEach((message) => {
+    messagesById.set(message.id, message);
+    const node = renderMessage(message);
+    messagesList.appendChild(node);
+    messageNodes.set(message.id, node);
+  });
+  scrollToBottom();
+  updateScrollState();
 });
 
 socket.on("message", (message) => {
-  addChatMessage(message);
+  upsertMessage(message);
+});
+
+socket.on("message_update", (message) => {
+  upsertMessage(message);
+});
+
+socket.on("reaction_update", (payload) => {
+  const target = messagesById.get(payload?.messageId);
+  if (!target) return;
+  target.reactions = payload.reactions || {};
+  upsertMessage(target);
 });
 
 socket.on("system", (text) => {
   addSystemMessage(text);
+});
+
+socket.on("message_error", (message) => {
+  showComposerError(message || "Message failed.");
+  setTimeout(() => showComposerError(""), 3000);
+});
+
+socket.on("game_joined", (payload) => {
+  gameSide = payload?.side || null;
+  if (payload?.state) {
+    gameState = payload.state;
+    updateGameScore();
+    renderGame();
+  }
+  if (gameSide) {
+    updateGameStatus(`You are ${gameSide}`);
+  } else {
+    updateGameStatus("Spectating");
+  }
+});
+
+socket.on("game_state", (state) => {
+  gameState = state;
+  updateGameScore();
+  if (gameSide) {
+    updateGameStatus(`You are ${gameSide}`);
+  } else {
+    updateGameStatus("Spectating");
+  }
 });
 
 socket.on("call_started", (payload) => {
@@ -845,6 +1505,9 @@ socket.on("call_joined", (payload) => {
   callRole = payload?.role || "caller";
   remotePeerId = payload?.peerId || null;
   callSessionId = payload?.sessionId || callSessionId;
+  if (!callStartedAt) {
+    callStartedAt = Date.now();
+  }
   showCallPanel(true);
   showCallBanner(false);
   lastStateChangeAt = Date.now();
@@ -953,3 +1616,4 @@ socket.on("webrtc_hangup", () => {
 });
 
 openOverlay();
+updateScrollState();
