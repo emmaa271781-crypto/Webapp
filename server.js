@@ -40,6 +40,7 @@ const pushSubscriptions = new Map();
 const callState = {
   callerId: null,
   calleeId: null,
+  sessionId: null,
 };
 const callPeers = new Map();
 const GAME_ROOM = "game";
@@ -475,6 +476,7 @@ const emitTyping = () => {
 const clearCallState = () => {
   callState.callerId = null;
   callState.calleeId = null;
+  callState.sessionId = null;
   callPeers.clear();
   io.to(ROOM_NAME).emit("call_ended");
 };
@@ -625,12 +627,13 @@ io.on("connection", (socket) => {
       return;
     }
     if (callPeers.has(socket.id) || callState.callerId === socket.id || callState.calleeId === socket.id) {
-      socket.emit("call_joined", { role: "caller", peerId: getPeerId() });
+      socket.emit("call_joined", { role: "caller", peerId: getPeerId(), sessionId: callState.sessionId });
       return;
     }
     if (!callState.callerId) {
       callState.callerId = socket.id;
-      socket.emit("call_joined", { role: "caller" });
+      callState.sessionId = randomUUID();
+      socket.emit("call_joined", { role: "caller", sessionId: callState.sessionId });
       socket.to(ROOM_NAME).emit("call_started", {
         user: socket.data.username,
       });
@@ -647,26 +650,31 @@ io.on("connection", (socket) => {
         peerId: callState.callerId,
         peerName: callerInfo.name,
         peerAvatar: callerInfo.avatar,
+        sessionId: callState.sessionId,
       });
       io.to(callState.callerId).emit("call_peer", {
         peerId: socket.id,
         peerName: calleeInfo.name,
         peerAvatar: calleeInfo.avatar,
+        sessionId: callState.sessionId,
       });
       socket.emit("call_peer", {
         peerId: callState.callerId,
         peerName: callerInfo.name,
         peerAvatar: callerInfo.avatar,
+        sessionId: callState.sessionId,
       });
       io.to(callState.callerId).emit("call_connected", {
         peerId: socket.id,
         peerName: calleeInfo.name,
         peerAvatar: calleeInfo.avatar,
+        sessionId: callState.sessionId,
       });
       socket.emit("call_connected", {
         peerId: callState.callerId,
         peerName: callerInfo.name,
         peerAvatar: callerInfo.avatar,
+        sessionId: callState.sessionId,
       });
       return;
     }
@@ -876,6 +884,9 @@ io.on("connection", (socket) => {
     if (!payload?.signal) {
       return;
     }
+    if (callState.sessionId && payload?.sessionId !== callState.sessionId) {
+      return;
+    }
     const target = payload.to || getPeerId();
     if (!target) {
       return;
@@ -883,6 +894,7 @@ io.on("connection", (socket) => {
     io.to(target).emit("webrtc_signal", {
       signal: payload.signal,
       from: socket.id,
+      sessionId: callState.sessionId,
     });
   });
 
@@ -949,7 +961,9 @@ io.on("connection", (socket) => {
     if (!target) {
       return;
     }
-    io.to(target).emit("call_restart", { from: socket.id });
+    callState.sessionId = randomUUID();
+    io.to(target).emit("call_restart", { from: socket.id, sessionId: callState.sessionId });
+    io.to(socket.id).emit("call_restart", { from: socket.id, sessionId: callState.sessionId });
   });
 
   socket.on("disconnect", () => {

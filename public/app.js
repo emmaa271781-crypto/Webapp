@@ -51,6 +51,7 @@ let hasTurnServer = false;
 let restartInProgress = false;
 let lastStateChangeAt = 0;
 let connectionWatchdog = null;
+let callSessionId = null;
 let iceServers = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
@@ -199,8 +200,14 @@ const prepareAudioContext = () => {
 const flushPendingSignals = () => {
   if (!socket || !remotePeerId) return;
   if (!pendingSignals.length) return;
-  pendingSignals.forEach((signal) => {
-    socket.emit("webrtc_signal", { signal, to: remotePeerId });
+  pendingSignals.forEach((entry) => {
+    if (!callSessionId || !entry?.sessionId || entry.sessionId === callSessionId) {
+      socket.emit("webrtc_signal", {
+        signal: entry.signal || entry,
+        to: remotePeerId,
+        sessionId: callSessionId,
+      });
+    }
   });
   pendingSignals = [];
 };
@@ -334,9 +341,9 @@ const ensurePeer = (initiator) => {
 
   peer.on("signal", (signal) => {
     if (remotePeerId && socket) {
-      socket.emit("webrtc_signal", { signal, to: remotePeerId });
+      socket.emit("webrtc_signal", { signal, to: remotePeerId, sessionId: callSessionId });
     } else {
-      pendingSignals.push(signal);
+      pendingSignals.push({ signal, sessionId: callSessionId });
     }
   });
 
@@ -615,6 +622,7 @@ const endCall = () => {
   isMicMuted = true;
   isCameraOn = false;
   isScreenSharing = false;
+  callSessionId = null;
   updateLocalVideo();
   updateRemoteVideo();
   if (remoteStatus) remoteStatus.textContent = "Waiting for peer";
@@ -836,6 +844,7 @@ socket.on("call_joined", (payload) => {
   restartInProgress = false;
   callRole = payload?.role || "caller";
   remotePeerId = payload?.peerId || null;
+  callSessionId = payload?.sessionId || callSessionId;
   showCallPanel(true);
   showCallBanner(false);
   lastStateChangeAt = Date.now();
@@ -866,6 +875,7 @@ socket.on("call_peer", (payload) => {
   remotePeerId = payload?.peerId || remotePeerId;
   restartInProgress = false;
   lastStateChangeAt = Date.now();
+  callSessionId = payload?.sessionId || callSessionId;
   if (remoteLabel) {
     remoteLabel.textContent = payload?.peerName || "Remote";
   }
@@ -883,6 +893,7 @@ socket.on("call_connected", (payload) => {
   remotePeerId = payload?.peerId || remotePeerId;
   restartInProgress = false;
   lastStateChangeAt = Date.now();
+  callSessionId = payload?.sessionId || callSessionId;
   if (remoteLabel) {
     remoteLabel.textContent = payload?.peerName || "Remote";
   }
@@ -902,9 +913,13 @@ socket.on("call_ended", () => {
   }
 });
 
-socket.on("call_restart", () => {
+socket.on("call_restart", (payload) => {
   if (!isInCall) return;
   restartInProgress = false;
+  if (payload?.sessionId) {
+    callSessionId = payload.sessionId;
+    pendingSignals = [];
+  }
   destroyPeer();
   ensurePeer(callRole === "caller");
   flushPendingSignals();
@@ -912,8 +927,15 @@ socket.on("call_restart", () => {
 
 socket.on("webrtc_signal", (payload) => {
   if (!payload?.signal) return;
+  if (payload?.sessionId) {
+    if (!callSessionId) {
+      callSessionId = payload.sessionId;
+    } else if (payload.sessionId !== callSessionId) {
+      return;
+    }
+  }
   if (!peer) {
-    pendingSignals.push(payload.signal);
+    pendingSignals.push({ signal: payload.signal, sessionId: payload.sessionId || callSessionId });
     if (isInCall && remotePeerId) {
       ensurePeer(callRole === "caller");
     }
