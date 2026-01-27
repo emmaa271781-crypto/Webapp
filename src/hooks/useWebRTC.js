@@ -20,15 +20,76 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const remoteStreamRef = useRef(null);
   const pendingSignalsRef = useRef([]);
   const reconnectAttemptsRef = useRef(0);
+  const silentStreamRef = useRef(null);
+  const hasTurnRef = useRef(false);
+  const iceServersRef = useRef([
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+  ]);
   const maxReconnectAttempts = 3;
   const connectionHealthRef = useRef(null);
   const iceConnectionStateRef = useRef('new');
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadIceServers = async () => {
+      try {
+        const response = await fetch('/api/ice');
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!cancelled && Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
+          iceServersRef.current = data.iceServers;
+          hasTurnRef.current = data.iceServers.some((server) => {
+            const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+            return urls.some((url) => typeof url === 'string' && url.startsWith('turn'));
+          });
+        }
+      } catch (err) {
+        // Keep default STUN servers on failure.
+      }
+    };
+    loadIceServers();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Connection health check helpers (defined first to avoid circular dependencies)
   const stopConnectionHealthCheck = useCallback(() => {
     if (connectionHealthRef.current) {
       clearInterval(connectionHealthRef.current);
       connectionHealthRef.current = null;
+    }
+  }, []);
+
+  const ensureSilentStream = useCallback(() => {
+    if (silentStreamRef.current) {
+      return silentStreamRef.current;
+    }
+    try {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) {
+        return null;
+      }
+      const audioContext = new AudioContextClass();
+      if (audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {});
+      }
+      const oscillator = audioContext.createOscillator();
+      const destination = audioContext.createMediaStreamDestination();
+      oscillator.connect(destination);
+      oscillator.start();
+      const track = destination.stream.getAudioTracks()[0];
+      if (track) {
+        track.enabled = false;
+      }
+      silentStreamRef.current = destination.stream;
+      return silentStreamRef.current;
+    } catch (err) {
+      return null;
     }
   }, []);
 
@@ -142,24 +203,22 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       return null;
     }
 
-    const stream = localStreamRef.current || new MediaStream();
+    const activeStream = localStreamRef.current && localStreamRef.current.getTracks().length > 0
+      ? localStreamRef.current
+      : ensureSilentStream();
     
-    // Enhanced ICE servers for better connectivity (Discord-style)
-    const iceServers = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
-      { urls: 'stun:stun4.l.google.com:19302' },
-    ];
+    const iceServers = Array.isArray(iceServersRef.current) && iceServersRef.current.length > 0
+      ? iceServersRef.current
+      : [{ urls: 'stun:stun.l.google.com:19302' }];
 
     const peer = new window.SimplePeer({
       initiator: Boolean(initiator),
       trickle: true,
-      stream: stream.getTracks().length > 0 ? stream : undefined,
+      stream: activeStream || undefined,
       config: {
         iceServers,
         iceCandidatePoolSize: 10, // Pre-gather more candidates
+        iceTransportPolicy: hasTurnRef.current ? 'relay' : 'all',
       },
       // Better browser compatibility
       sdpTransform: (sdp) => {
@@ -374,10 +433,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
           }
         });
         // Trigger renegotiation for callee
-        if (callRole !== 'caller' && peerRef.current.negotiate) {
+        if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+          const activePeer = peerRef.current;
           setTimeout(() => {
+            if (!peerRef.current || peerRef.current !== activePeer || activePeer.destroyed) {
+              return;
+            }
             try {
-              peerRef.current.negotiate();
+              activePeer.negotiate();
             } catch (err) {
               console.warn('[WebRTC] Error negotiating:', err);
             }
@@ -428,10 +491,14 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
                 localStreamRef.current.addTrack(newAudioTrack);
                 peerRef.current.addTrack(newAudioTrack, localStreamRef.current);
               }
-              if (callRole !== 'caller' && peerRef.current.negotiate) {
+              if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+                const activePeer = peerRef.current;
                 setTimeout(() => {
+                  if (!peerRef.current || peerRef.current !== activePeer || activePeer.destroyed) {
+                    return;
+                  }
                   try {
-                    peerRef.current.negotiate();
+                    activePeer.negotiate();
                   } catch (err) {
                     console.warn('[WebRTC] Negotiate error:', err);
                   }
@@ -484,8 +551,12 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
             } else {
               peerRef.current.addTrack(videoTrack, localStreamRef.current);
             }
-            if (callRole !== 'caller' && peerRef.current.negotiate) {
-              peerRef.current.negotiate();
+            if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+              try {
+                peerRef.current.negotiate();
+              } catch (err) {
+                console.warn('[WebRTC] Negotiate error:', err);
+              }
             }
           }
         }
@@ -501,83 +572,44 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
   const toggleScreenShare = useCallback(async () => {
     if (isScreenSharing) {
       // Stop screen share
-      console.log('[WebRTC] Stopping screen share');
       if (localStreamRef.current) {
         localStreamRef.current.getVideoTracks().forEach(track => {
-          if (track.getSettings().displaySurface === 'monitor' || track.label.includes('screen')) {
+          if (track.getSettings().displaySurface === 'monitor') {
             track.stop();
-            localStreamRef.current.removeTrack(track);
             if (peerRef.current && peerRef.current.removeTrack) {
-              try {
-                peerRef.current.removeTrack(track, localStreamRef.current);
-              } catch (err) {
-                console.warn('[WebRTC] Error removing screen track:', err);
-              }
+              peerRef.current.removeTrack(track, localStreamRef.current);
             }
           }
         });
       }
       setIsScreenSharing(false);
       
-      // Re-enable camera if it was on before screen share
+      // Re-enable camera if it was on
       if (isCameraEnabled) {
-        console.log('[WebRTC] Re-enabling camera after screen share');
         await toggleCamera();
-      } else {
-        // If no camera, trigger renegotiation to update remote
-        if (peerRef.current?.negotiate && callRole !== 'caller') {
-          try {
-            peerRef.current.negotiate();
-          } catch (err) {
-            console.warn('[WebRTC] Error negotiating after screen share stop:', err);
-          }
-        }
       }
     } else {
       // Start screen share
       try {
-        console.log('[WebRTC] Starting screen share');
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { 
-            width: { ideal: 1280 }, 
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
-          },
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
           audio: false,
         });
 
         const screenTrack = screenStream.getVideoTracks()[0];
-        if (!screenTrack) {
-          throw new Error('No screen track available');
-        }
         
-        // Ensure we have a local stream
         if (!localStreamRef.current) {
           localStreamRef.current = new MediaStream();
         }
 
-        // Stop existing video tracks (camera or previous screen share)
-        const existingVideoTracks = localStreamRef.current.getVideoTracks();
-        existingVideoTracks.forEach(track => {
-          localStreamRef.current.removeTrack(track);
-          if (peerRef.current?.removeTrack) {
-            try {
-              peerRef.current.removeTrack(track, localStreamRef.current);
-            } catch (err) {
-              console.warn('[WebRTC] Error removing existing video track:', err);
-            }
-          }
-        });
-
-        // Add screen track
-        localStreamRef.current.addTrack(screenTrack);
-        
-        if (peerRef.current) {
-          try {
+        // Replace camera track with screen track
+        const existingVideoTrack = localStreamRef.current.getVideoTracks()[0];
+        if (existingVideoTrack && peerRef.current?.replaceTrack) {
+          peerRef.current.replaceTrack(existingVideoTrack, screenTrack, localStreamRef.current);
+        } else {
+          localStreamRef.current.addTrack(screenTrack);
+          if (peerRef.current) {
             peerRef.current.addTrack(screenTrack, localStreamRef.current);
-            console.log('[WebRTC] Added screen track to peer');
-          } catch (err) {
-            console.warn('[WebRTC] Error adding screen track to peer:', err);
           }
         }
 
@@ -585,46 +617,25 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
           localVideoRef.current.srcObject = localStreamRef.current;
         }
 
-        // Handle screen share ending (user stops sharing in browser)
         screenTrack.onended = () => {
-          console.log('[WebRTC] Screen share ended by user');
           setIsScreenSharing(false);
-          // Clean up
-          if (localStreamRef.current) {
-            localStreamRef.current.removeTrack(screenTrack);
-          }
         };
 
         setIsScreenSharing(true);
-        // Mark camera as disabled if it was on (we'll restore it when screen share stops)
-        const hadCamera = isCameraEnabled;
-        if (hadCamera) {
+        if (isCameraEnabled) {
           setIsCameraEnabled(false);
         }
 
-        // Trigger renegotiation for callee
-        if (callRole !== 'caller' && peerRef.current?.negotiate) {
-          setTimeout(() => {
-            try {
-              peerRef.current.negotiate();
-              console.log('[WebRTC] Triggered renegotiation for screen share');
-            } catch (err) {
-              console.warn('[WebRTC] Error negotiating screen share:', err);
-            }
-          }, 100);
-        } else if (callRole === 'caller' && peerRef.current) {
-          // For caller, signals will be sent automatically via 'signal' event
-          console.log('[WebRTC] Screen share started, signals will be sent automatically');
+        if (callRole !== 'caller' && peerRef.current?.negotiate && !peerRef.current.destroyed) {
+          try {
+            peerRef.current.negotiate();
+          } catch (err) {
+            console.warn('[WebRTC] Negotiate error:', err);
+          }
         }
       } catch (err) {
         console.error('[WebRTC] Error sharing screen:', err);
-        if (err.name === 'NotAllowedError') {
-          alert('Screen sharing was denied. Please allow screen sharing permissions.');
-        } else if (err.name === 'NotFoundError') {
-          alert('No screen or window available to share.');
-        } else {
-          alert('Failed to share screen. Please check permissions and try again.');
-        }
+        alert('Failed to share screen. Please check permissions.');
       }
     }
   }, [isScreenSharing, isCameraEnabled, callRole, toggleCamera]);
@@ -648,36 +659,17 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         destroyPeer();
       }
       
-      // Try to get local stream (audio optional - call works without mic)
-      // This allows calls to connect even if mic permission is denied
-      getLocalStream(true, false).then(() => {
-        console.log('[WebRTC] Local stream obtained, initializing peer');
-        setIsMicMuted(true); // Start muted
-        const peer = initPeer(callRole === 'caller');
-        if (peer) {
-          console.log('[WebRTC] Peer initialized, flushing pending signals');
-          setTimeout(() => {
-            flushPendingSignals();
-          }, 100);
-        } else {
-          console.error('[WebRTC] Failed to initialize peer');
-        }
-      }).catch(err => {
-        console.warn('[WebRTC] Could not get local stream (mic may be disabled):', err.message);
-        // Continue without local stream - call can still work for receiving audio
-        console.log('[WebRTC] Initializing peer without local stream - call will work for receiving');
-        setIsMicMuted(true);
-        // Create empty stream for peer initialization
-        if (!localStreamRef.current) {
-          localStreamRef.current = new MediaStream();
-        }
-        const peer = initPeer(callRole === 'caller');
-        if (peer) {
-          setTimeout(() => {
-            flushPendingSignals();
-          }, 100);
-        }
-      });
+      ensureSilentStream();
+      setIsMicMuted(true);
+      const peer = initPeer(callRole === 'caller');
+      if (peer) {
+        console.log('[WebRTC] Peer initialized, flushing pending signals');
+        setTimeout(() => {
+          flushPendingSignals();
+        }, 100);
+      } else {
+        console.error('[WebRTC] Failed to initialize peer');
+      }
 
       return () => {
         console.log('[WebRTC] Cleaning up peer connection');
@@ -692,8 +684,35 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
       setIsMicMuted(true);
       setIsCameraEnabled(false);
       setIsScreenSharing(false);
+      if (silentStreamRef.current) {
+        silentStreamRef.current.getTracks().forEach((track) => track.stop());
+        silentStreamRef.current = null;
+      }
     }
-  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream, getLocalStream]);
+  }, [isInCall, socket, remotePeerId, callRole, initPeer, flushPendingSignals, destroyPeer, stopLocalStream, ensureSilentStream]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRestart = () => {
+      if (!isInCall) return;
+      console.log('[WebRTC] Received call_restart, reinitializing peer');
+      destroyPeer();
+      ensureSilentStream();
+      const peer = initPeer(callRole === 'caller');
+      if (peer) {
+        setTimeout(() => {
+          flushPendingSignals();
+        }, 100);
+      }
+    };
+
+    socket.on('call_restart', handleRestart);
+
+    return () => {
+      socket.off('call_restart', handleRestart);
+    };
+  }, [socket, isInCall, callRole, initPeer, destroyPeer, flushPendingSignals, ensureSilentStream]);
 
   // Handle WebRTC signals from server
   useEffect(() => {
@@ -705,11 +724,18 @@ export function useWebRTC(socket, isInCall, callRole, remotePeerId, onCallEnd) {
         console.warn('[WebRTC] Signal missing signal data:', payload);
         return;
       }
+      if (payload?.from && remotePeerId && payload.from !== remotePeerId) {
+        console.warn('[WebRTC] Ignoring signal from unknown peer:', payload.from);
+        return;
+      }
       
       // If peer doesn't exist yet, queue the signal
-      if (!peerRef.current) {
+      if (!peerRef.current || peerRef.current.destroyed) {
         console.log('[WebRTC] Peer not ready, queuing signal');
         pendingSignalsRef.current.push(payload.signal);
+        if (pendingSignalsRef.current.length > 200) {
+          pendingSignalsRef.current.shift();
+        }
         // Try to initialize peer if we have remotePeerId
         if (remotePeerId && isInCall) {
           console.log('[WebRTC] Initializing peer from signal handler');
