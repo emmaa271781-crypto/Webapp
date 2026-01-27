@@ -24,7 +24,7 @@ import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import MessageComposer from './components/MessageComposer';
 import MessageActions from './components/MessageActions';
-import GameInvite from './components/GameInvite';
+import { GameInvite } from './components/GameInvite';
 import { useStreaks } from './hooks/useStreaks';
 import './App.css';
 
