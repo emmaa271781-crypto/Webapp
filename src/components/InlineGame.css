@@ -1,0 +1,91 @@
+.inline-game {
+  background: var(--bg-secondary, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  border-radius: 1rem;
+  padding: 1rem;
+  margin: 0.5rem 0;
+  max-width: 400px;
+}
+
+.inline-game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color, #333);
+}
+
+.inline-game-title {
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  font-size: 0.95rem;
+}
+
+.inline-game-switch {
+  background: var(--bg-tertiary, #2a2a2a);
+  border: 1px solid var(--border-color, #333);
+  color: var(--text-primary, #fff);
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+}
+
+.inline-game-switch:hover {
+  background: var(--accent, #00d4aa);
+  color: var(--bg-primary, #0a0a0a);
+}
+
+.inline-game-close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #aaa);
+  font-size: 1.5rem;
+  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s;
+  line-height: 1;
+  padding: 0;
+}
+
+.inline-game-close:hover {
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-primary, #fff);
+}
+
+.inline-game-board {
+  min-height: 300px;
+}
+
+/* Override boardgame.io styles for inline display */
+.inline-game .tictactoe-board {
+  width: 100%;
+}
+
+.inline-game .tictactoe-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.inline-game .tictactoe-cell {
+  aspect-ratio: 1;
+  min-height: 80px;
+  font-size: 2rem;
+}
+
+.inline-game .tictactoe-status {
+  text-align: center;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #aaa);
+}

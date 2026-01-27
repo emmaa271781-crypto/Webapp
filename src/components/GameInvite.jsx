@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { InlineGame } from './InlineGame';
 import './GameInvite.css';
 
 // Game invite component for iMessage-style game invites in chat
 export function GameInvite({ message, currentUser, socket, onAccept, onDecline }) {
   const { gameType, from, gameId } = message.gameInvite || {};
+  const [gameStarted, setGameStarted] = useState(message.status === 'accepted');
   
   const gameIcons = {
     tictactoe: '⭕',
@@ -21,11 +23,12 @@ export function GameInvite({ message, currentUser, socket, onAccept, onDecline }
   };
 
   const isFromMe = from === currentUser;
-  const canAccept = !isFromMe && message.status === 'pending';
+  const canAccept = !isFromMe && message.status === 'pending' && !gameStarted;
 
   const handleAccept = () => {
     if (socket && gameId) {
       socket.emit('game_accept', { gameId, gameType });
+      setGameStarted(true);
       if (onAccept) onAccept({ gameId, gameType });
     }
   };
@@ -36,6 +39,26 @@ export function GameInvite({ message, currentUser, socket, onAccept, onDecline }
       if (onDecline) onDecline({ gameId });
     }
   };
+
+  // If game is accepted, show the game inline
+  if (gameStarted || message.status === 'accepted') {
+    return (
+      <div className="game-invite-container">
+        <div className="game-invite-header">
+          <span className="game-invite-label">
+            {isFromMe ? 'You' : from} started {gameNames[gameType] || gameType}
+          </span>
+        </div>
+        <InlineGame
+          gameType={gameType}
+          gameId={gameId}
+          currentUser={currentUser}
+          opponent={from}
+          onGameEnd={() => setGameStarted(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <motion.div
@@ -71,9 +94,6 @@ export function GameInvite({ message, currentUser, socket, onAccept, onDecline }
             Decline
           </motion.button>
         </div>
-      )}
-      {message.status === 'accepted' && (
-        <div className="game-invite-status">✓ Accepted</div>
       )}
       {message.status === 'declined' && (
         <div className="game-invite-status">✗ Declined</div>

@@ -3,11 +3,7 @@ import './TicTacToeBoard.css';
 
 export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
   if (!G || !G.cells || !ctx || !moves) {
-    return (
-      <div className="tictactoe-board">
-        <div className="tictactoe-status">Loading game...</div>
-      </div>
-    );
+    return null;
   }
 
   const currentPlayerID = playerID || ctx.playerID || '0';

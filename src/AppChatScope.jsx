@@ -341,7 +341,7 @@ function AppChatScope() {
                 fullMessageContent = `↩ ${msg.replyTo.user}: ${msg.replyTo.text?.slice(0, 30) || '(deleted)'}\n${messageContent}`;
               }
 
-              // Check if this is a game invite
+              // Check if this is a game invite - show inline in chat
               if (msg.gameInvite) {
                 return (
                   <div key={msg.id} style={{ marginBottom: '0.5rem' }}>
@@ -349,11 +349,6 @@ function AppChatScope() {
                       message={msg}
                       currentUser={currentUser}
                       socket={socket}
-                      onAccept={({ gameId, gameType }) => {
-                        setGameType(gameType);
-                        setGameMode('boardgame');
-                        setShowGame(true);
-                      }}
                     />
                   </div>
                 );

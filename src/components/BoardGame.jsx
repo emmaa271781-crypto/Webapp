@@ -120,17 +120,11 @@ function BoardGame({ gameType, playerID, onGameEnd, currentUser }) {
   const gameDefinition = GAME_DEFINITIONS[gameType];
 
   if (!BoardComponent || !gameDefinition) {
-    return (
-      <div className="boardgame-container">
-        <div className="boardgame-loading">Game type not found: {gameType}</div>
-        <button onClick={onGameEnd} className="boardgame-close-btn">
-          Close
-        </button>
-      </div>
-    );
+    return null;
   }
 
   // Memoize the Client to avoid recreating on every render
+  // Use local multiplayer - no server, works immediately
   const App = useMemo(() => {
     try {
       return Client({
@@ -138,6 +132,7 @@ function BoardGame({ gameType, playerID, onGameEnd, currentUser }) {
         board: BoardComponent,
         numPlayers: 2,
         debug: false,
+        multiplayer: false, // Local multiplayer - no server needed
       });
     } catch (err) {
       console.error('Error creating boardgame.io client:', err);
@@ -153,14 +148,7 @@ function BoardGame({ gameType, playerID, onGameEnd, currentUser }) {
   }[gameType] || 'Game';
 
   if (!App) {
-    return (
-      <div className="boardgame-container">
-        <div className="boardgame-loading">Error initializing game</div>
-        <button onClick={onGameEnd} className="boardgame-close-btn">
-          Close
-        </button>
-      </div>
-    );
+    return null;
   }
 
   return (
