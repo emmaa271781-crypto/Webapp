@@ -2,13 +2,22 @@ import React, { useState } from 'react';
 import './CheckersBoard.css';
 
 export function CheckersBoard({ G, ctx, moves, events, playerID }) {
+  // Defensive checks for undefined props
+  if (!G || !G.cells || !ctx || !moves) {
+    return (
+      <div className="checkers-board">
+        <div className="checkers-status">Loading game...</div>
+      </div>
+    );
+  }
+
   const currentPlayerID = playerID || ctx.playerID || '0';
   const [selectedCell, setSelectedCell] = useState(null);
 
   const onClick = (id) => {
     if (selectedCell === null) {
       // Select piece
-      const piece = G.cells[id];
+      const piece = G.cells && G.cells[id] !== undefined ? G.cells[id] : null;
       if (piece !== null && ((currentPlayerID === '0' && (piece === 1 || piece === 3)) || (currentPlayerID === '1' && (piece === 2 || piece === 4)))) {
         setSelectedCell(id);
       }
@@ -27,7 +36,7 @@ export function CheckersBoard({ G, ctx, moves, events, playerID }) {
     const row = Math.floor(id / 8);
     const col = id % 8;
     const isDark = (row + col) % 2 === 1;
-    const piece = G.cells[id];
+    const piece = G.cells && G.cells[id] !== undefined ? G.cells[id] : null;
     const isSelected = selectedCell === id;
 
     let pieceSymbol = '';
@@ -48,7 +57,7 @@ export function CheckersBoard({ G, ctx, moves, events, playerID }) {
   };
 
   let status = '';
-  if (ctx.gameover) {
+  if (ctx.gameover && typeof ctx.gameover === 'object' && ctx.gameover.winner !== undefined) {
     status = ctx.gameover.winner === currentPlayerID ? 'You won!' : 'You lost!';
   } else {
     status = ctx.currentPlayer === currentPlayerID ? 'Your turn' : "Opponent's turn";

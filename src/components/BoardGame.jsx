@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Client } from 'boardgame.io/react';
 import { TicTacToeBoard } from './games/TicTacToeBoard';
 import { CheckersBoard } from './games/CheckersBoard';
@@ -153,14 +153,20 @@ function BoardGame({ gameType, playerID, onGameEnd, currentUser }) {
     );
   }
 
-  // Create boardgame.io client with local multiplayer
-  // For true multiplayer, integrate with boardgame.io server
-  const App = Client({
-    game: gameDefinition,
-    board: BoardComponent,
-    numPlayers: 2,
-    debug: false,
-  });
+  // Memoize the Client to avoid recreating on every render
+  const App = useMemo(() => {
+    try {
+      return Client({
+        game: gameDefinition,
+        board: BoardComponent,
+        numPlayers: 2,
+        debug: false,
+      });
+    } catch (err) {
+      console.error('Error creating boardgame.io client:', err);
+      return null;
+    }
+  }, [gameDefinition, BoardComponent]);
 
   const gameTitle = {
     tictactoe: 'Tic-Tac-Toe',
@@ -168,6 +174,17 @@ function BoardGame({ gameType, playerID, onGameEnd, currentUser }) {
     connectfour: 'Connect Four',
     chess: 'Chess',
   }[gameType] || 'Game';
+
+  if (!App) {
+    return (
+      <div className="boardgame-container">
+        <div className="boardgame-loading">Error initializing game</div>
+        <button onClick={onGameEnd} className="boardgame-close-btn">
+          Close
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="boardgame-container">

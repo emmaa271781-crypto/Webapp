@@ -5,6 +5,15 @@ const ROWS = 6;
 const COLS = 7;
 
 export function ConnectFourBoard({ G, ctx, moves, events, playerID }) {
+  // Defensive checks for undefined props
+  if (!G || !G.cells || !ctx || !moves) {
+    return (
+      <div className="connectfour-board">
+        <div className="connectfour-status">Loading game...</div>
+      </div>
+    );
+  }
+
   const currentPlayerID = playerID || ctx.playerID || '0';
   const onClick = (col) => {
     if (ctx.currentPlayer === currentPlayerID) {
@@ -14,7 +23,7 @@ export function ConnectFourBoard({ G, ctx, moves, events, playerID }) {
 
   const renderCell = (row, col) => {
     const index = row * COLS + col;
-    const value = G.cells[index];
+    const value = G.cells && G.cells[index] !== undefined ? G.cells[index] : null;
     let symbol = '';
     if (value === '0') symbol = '🔴';
     if (value === '1') symbol = '🟡';
@@ -27,7 +36,7 @@ export function ConnectFourBoard({ G, ctx, moves, events, playerID }) {
   };
 
   let status = '';
-  if (ctx.gameover) {
+  if (ctx.gameover && typeof ctx.gameover === 'object') {
     if (ctx.gameover.winner !== undefined) {
       status = `Winner: Player ${ctx.gameover.winner === currentPlayerID ? 'You' : 'Opponent'}`;
     } else {

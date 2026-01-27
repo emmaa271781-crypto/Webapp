@@ -2,16 +2,25 @@ import React from 'react';
 import './TicTacToeBoard.css';
 
 export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
+  // Defensive checks for undefined props
+  if (!G || !G.cells || !ctx || !moves) {
+    return (
+      <div className="tictactoe-board">
+        <div className="tictactoe-status">Loading game...</div>
+      </div>
+    );
+  }
+
   const currentPlayerID = playerID || ctx.playerID || '0';
   
   const onClick = (id) => {
-    if (G.cells[id] === null && ctx.currentPlayer === currentPlayerID) {
+    if (G.cells && G.cells[id] === null && ctx.currentPlayer === currentPlayerID) {
       moves.clickCell(id);
     }
   };
 
   const cell = (id) => {
-    const value = G.cells[id];
+    const value = G.cells && G.cells[id] !== undefined ? G.cells[id] : null;
     let symbol = '';
     if (value === '0') symbol = 'X';
     if (value === '1') symbol = 'O';
@@ -29,7 +38,7 @@ export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
   };
 
   let status = '';
-  if (ctx.gameover) {
+  if (ctx.gameover && typeof ctx.gameover === 'object') {
     if (ctx.gameover.winner !== undefined) {
       status = `Winner: Player ${ctx.gameover.winner === currentPlayerID ? 'You' : 'Opponent'}`;
     } else {
