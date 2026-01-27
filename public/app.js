@@ -46,6 +46,8 @@ let reconnectAttempts = 0;
 let reconnectTimer = null;
 let silentStream = null;
 let restoreCameraAfterShare = false;
+let audioContextReady = false;
+let hasTurnServer = false;
 let iceServers = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
@@ -157,16 +159,28 @@ const loadIceServers = async () => {
     const data = await response.json();
     if (Array.isArray(data?.iceServers) && data.iceServers.length > 0) {
       iceServers = data.iceServers;
+      hasTurnServer = data.iceServers.some((server) => {
+        const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+        return urls.some((url) => typeof url === "string" && url.startsWith("turn"));
+      });
+      if (!hasTurnServer) {
+        setCallQuality("Quality: limited (no TURN)");
+      }
     }
   } catch (err) {
     // Keep defaults on failure.
   }
 };
 
-const getSilentStream = () => {
-  if (silentStream) return silentStream;
+const prepareAudioContext = () => {
+  if (audioContextReady) return;
+  audioContextReady = true;
+  if (silentStream) return;
   try {
     const audioContext = new AudioContext();
+    if (audioContext.state === "suspended") {
+      audioContext.resume();
+    }
     const oscillator = audioContext.createOscillator();
     const destination = audioContext.createMediaStreamDestination();
     oscillator.connect(destination);
@@ -174,10 +188,8 @@ const getSilentStream = () => {
     const track = destination.stream.getAudioTracks()[0];
     track.enabled = false;
     silentStream = destination.stream;
-    return silentStream;
   } catch (err) {
-    silentStream = new MediaStream();
-    return silentStream;
+    silentStream = null;
   }
 };
 
@@ -233,7 +245,7 @@ const attachPeerListeners = (pc) => {
     const state = pc.iceConnectionState;
     if (state === "connected" || state === "completed") {
       setCallStatus("Connected");
-      setCallQuality("Quality: good");
+      setCallQuality(hasTurnServer ? "Quality: good" : "Quality: limited (no TURN)");
       reconnectAttempts = 0;
     } else if (state === "disconnected") {
       setCallStatus("Reconnecting...");
@@ -261,8 +273,16 @@ const ensurePeer = (initiator) => {
     setCallStatus("Call unavailable");
     return null;
   }
+  if (silentStream && silentStream.getAudioTracks) {
+    const tracks = silentStream.getAudioTracks();
+    if (!tracks.length || tracks.some((track) => track.readyState === "ended")) {
+      silentStream = null;
+    }
+  }
   const streamToUse =
-    localStream && localStream.getTracks().length > 0 ? localStream : getSilentStream();
+    localStream && localStream.getTracks().length > 0
+      ? localStream
+      : silentStream || undefined;
 
   peer = new window.SimplePeer({
     initiator: Boolean(initiator),
@@ -402,6 +422,7 @@ const replaceVideoTrack = (newTrack) => {
 
 const toggleMic = async () => {
   if (!isInCall) return;
+  prepareAudioContext();
   if (isMicMuted) {
     const existing = localStream?.getAudioTracks()[0];
     if (existing) {
@@ -438,6 +459,7 @@ const toggleMic = async () => {
 };
 
 const enableCamera = async () => {
+  prepareAudioContext();
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
       video: {
@@ -476,6 +498,10 @@ const toggleCamera = async () => {
 
 const toggleScreenShare = async () => {
   if (!isInCall) return;
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    alert("Screen sharing is not supported on this device.");
+    return;
+  }
   if (!isScreenSharing) {
     try {
       restoreCameraAfterShare = isCameraOn;
@@ -525,6 +551,7 @@ const startCall = () => {
     openOverlay();
     return;
   }
+  prepareAudioContext();
   loadIceServers();
   socket.emit("call_join");
   ensureAudioPlayback();
@@ -551,6 +578,7 @@ const endCall = () => {
   updateRemoteVideo();
   if (remoteStatus) remoteStatus.textContent = "Waiting for peer";
   setCallStatus("Call idle");
+  setCallQuality("Quality: -");
   showCallBanner(false);
   if (remoteLabel) remoteLabel.textContent = "Remote";
   showCallPanel(false);
@@ -665,6 +693,7 @@ if (callEndButton) {
 if (callJoinButton) {
   callJoinButton.addEventListener("click", () => {
     showCallBanner(false);
+    prepareAudioContext();
     startCall();
   });
 }
@@ -679,6 +708,11 @@ if (toggleCamButton) {
 }
 if (toggleShareButton) {
   toggleShareButton.addEventListener("click", toggleScreenShare);
+}
+
+if (toggleShareButton && !navigator.mediaDevices?.getDisplayMedia) {
+  toggleShareButton.disabled = true;
+  toggleShareButton.title = "Screen sharing not supported on this device.";
 }
 
 window.addEventListener("beforeunload", () => {
