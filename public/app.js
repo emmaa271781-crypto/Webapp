@@ -48,6 +48,9 @@ let silentStream = null;
 let restoreCameraAfterShare = false;
 let audioContextReady = false;
 let hasTurnServer = false;
+let restartInProgress = false;
+let lastStateChangeAt = 0;
+let connectionWatchdog = null;
 let iceServers = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
@@ -217,15 +220,17 @@ const destroyPeer = () => {
     reconnectTimer = null;
   }
   reconnectAttempts = 0;
+  restartInProgress = false;
 };
 
 const scheduleReconnect = (reason) => {
   if (!isInCall || !remotePeerId) return;
-  if (reconnectTimer) return;
+  if (reconnectTimer || restartInProgress) return;
   if (reconnectAttempts >= maxReconnectAttempts) {
     setCallStatus("Connection failed");
     return;
   }
+  restartInProgress = true;
   reconnectAttempts += 1;
   setCallStatus(`Reconnecting (${reconnectAttempts})`);
   reconnectTimer = setTimeout(() => {
@@ -243,10 +248,16 @@ const attachPeerListeners = (pc) => {
   if (!pc) return;
   pc.addEventListener("iceconnectionstatechange", () => {
     const state = pc.iceConnectionState;
+    lastStateChangeAt = Date.now();
     if (state === "connected" || state === "completed") {
       setCallStatus("Connected");
       setCallQuality(hasTurnServer ? "Quality: good" : "Quality: limited (no TURN)");
       reconnectAttempts = 0;
+      restartInProgress = false;
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
     } else if (state === "disconnected") {
       setCallStatus("Reconnecting...");
       scheduleReconnect("disconnected");
@@ -257,8 +268,10 @@ const attachPeerListeners = (pc) => {
   });
   pc.addEventListener("connectionstatechange", () => {
     const state = pc.connectionState;
+    lastStateChangeAt = Date.now();
     if (state === "connected") {
       setCallStatus("Connected");
+      restartInProgress = false;
     } else if (state === "disconnected") {
       setCallStatus("Reconnecting...");
     } else if (state === "failed") {
@@ -291,6 +304,7 @@ const ensurePeer = (initiator) => {
     config: {
       iceServers,
       iceCandidatePoolSize: 10,
+      iceTransportPolicy: hasTurnServer ? "relay" : "all",
     },
     sdpTransform: (sdp) => sdp.replace(/a=extmap-allow-mixed\r\n/g, ""),
   });
@@ -306,6 +320,8 @@ const ensurePeer = (initiator) => {
   peer.on("connect", () => {
     setCallStatus("Connected");
     reconnectAttempts = 0;
+    restartInProgress = false;
+    lastStateChangeAt = Date.now();
   });
 
   peer.on("stream", (stream) => {
@@ -339,12 +355,14 @@ const ensurePeer = (initiator) => {
   peer.on("close", () => {
     if (isInCall) {
       setCallStatus("Reconnecting...");
+      lastStateChangeAt = Date.now();
       scheduleReconnect("close");
     }
   });
 
   peer.on("error", () => {
     if (isInCall) {
+      lastStateChangeAt = Date.now();
       scheduleReconnect("error");
     }
   });
@@ -583,6 +601,10 @@ const endCall = () => {
   if (remoteLabel) remoteLabel.textContent = "Remote";
   showCallPanel(false);
   updateCallButtons();
+  if (connectionWatchdog) {
+    clearInterval(connectionWatchdog);
+    connectionWatchdog = null;
+  }
 };
 
 const formatTime = (isoString) => {
@@ -788,10 +810,12 @@ socket.on("call_busy", () => {
 
 socket.on("call_joined", (payload) => {
   isInCall = true;
+  restartInProgress = false;
   callRole = payload?.role || "caller";
   remotePeerId = payload?.peerId || null;
   showCallPanel(true);
   showCallBanner(false);
+  lastStateChangeAt = Date.now();
   if (remoteLabel) {
     remoteLabel.textContent = payload?.peerName || "Remote";
   }
@@ -804,10 +828,20 @@ socket.on("call_joined", (payload) => {
     ensurePeer(callRole === "caller");
     flushPendingSignals();
   }
+  if (!connectionWatchdog) {
+    connectionWatchdog = setInterval(() => {
+      if (!isInCall || !remotePeerId) return;
+      if (Date.now() - lastStateChangeAt > 15000) {
+        scheduleReconnect("timeout");
+      }
+    }, 5000);
+  }
 });
 
 socket.on("call_peer", (payload) => {
   remotePeerId = payload?.peerId || remotePeerId;
+  restartInProgress = false;
+  lastStateChangeAt = Date.now();
   if (remoteLabel) {
     remoteLabel.textContent = payload?.peerName || "Remote";
   }
@@ -823,6 +857,8 @@ socket.on("call_peer", (payload) => {
 
 socket.on("call_connected", (payload) => {
   remotePeerId = payload?.peerId || remotePeerId;
+  restartInProgress = false;
+  lastStateChangeAt = Date.now();
   if (remoteLabel) {
     remoteLabel.textContent = payload?.peerName || "Remote";
   }
@@ -844,6 +880,7 @@ socket.on("call_ended", () => {
 
 socket.on("call_restart", () => {
   if (!isInCall) return;
+  restartInProgress = false;
   destroyPeer();
   ensurePeer(callRole === "caller");
   flushPendingSignals();
