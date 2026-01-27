@@ -2,7 +2,6 @@ import React from 'react';
 import './TicTacToeBoard.css';
 
 export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
-  // Defensive checks for undefined props
   if (!G || !G.cells || !ctx || !moves) {
     return (
       <div className="tictactoe-board">
@@ -14,13 +13,13 @@ export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
   const currentPlayerID = playerID || ctx.playerID || '0';
   
   const onClick = (id) => {
-    if (G.cells && G.cells[id] === null && ctx.currentPlayer === currentPlayerID) {
+    if (G.cells[id] === null && ctx.currentPlayer === currentPlayerID) {
       moves.clickCell(id);
     }
   };
 
   const cell = (id) => {
-    const value = G.cells && G.cells[id] !== undefined ? G.cells[id] : null;
+    const value = G.cells[id];
     let symbol = '';
     if (value === '0') symbol = 'X';
     if (value === '1') symbol = 'O';
@@ -38,11 +37,12 @@ export function TicTacToeBoard({ G, ctx, moves, events, playerID }) {
   };
 
   let status = '';
-  if (ctx.gameover && typeof ctx.gameover === 'object') {
+  if (ctx.gameover) {
     if (ctx.gameover.winner !== undefined) {
-      status = `Winner: Player ${ctx.gameover.winner === currentPlayerID ? 'You' : 'Opponent'}`;
-    } else {
-      status = 'Draw!';
+      const isWinner = ctx.gameover.winner === currentPlayerID;
+      status = isWinner ? '🎉 You won!' : '😔 You lost';
+    } else if (ctx.gameover.draw) {
+      status = '🤝 Draw!';
     }
   } else {
     status = ctx.currentPlayer === currentPlayerID ? 'Your turn' : "Opponent's turn";

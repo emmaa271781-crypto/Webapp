@@ -4,44 +4,8 @@ import { TicTacToeBoard } from './games/TicTacToeBoard';
 import { CheckersBoard } from './games/CheckersBoard';
 import { ConnectFourBoard } from './games/ConnectFourBoard';
 import { ChessBoard } from './games/ChessBoard';
+import { TicTacToe } from '../games/TicTacToe';
 import './BoardGame.css';
-
-// Import game definitions - convert to CommonJS compatible format
-const TicTacToe = {
-  setup: () => ({ cells: Array(9).fill(null) }),
-  turn: { minMoves: 1, maxMoves: 1 },
-  moves: {
-    clickCell: (G, ctx, id) => {
-      if (!G || !G.cells || !Array.isArray(G.cells) || !ctx || id === undefined) return G;
-      if (G.cells[id] !== null) return G;
-      const cells = [...G.cells];
-      cells[id] = ctx.currentPlayer;
-      return { ...G, cells };
-    },
-  },
-  endIf: (G, ctx) => {
-    if (!G || !G.cells || !ctx) return;
-    if (IsVictory(G.cells)) return { winner: ctx.currentPlayer };
-    if (IsDraw(G.cells)) return { draw: true };
-  },
-};
-
-function IsVictory(cells) {
-  if (!cells || !Array.isArray(cells) || cells.length < 9) return false;
-  const positions = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-  const isRowComplete = (row) => {
-    if (!row || !Array.isArray(row) || row.length < 3) return false;
-    const symbols = row.map((i) => cells[i]).filter(s => s !== undefined);
-    if (symbols.length < 3) return false;
-    return symbols[0] !== null && symbols[0] === symbols[1] && symbols[1] === symbols[2];
-  };
-  return positions.map(isRowComplete).some((r) => r === true);
-}
-
-function IsDraw(cells) {
-  if (!cells || !Array.isArray(cells)) return false;
-  return cells.filter((c) => c === null).length === 0;
-}
 
 const Checkers = {
   setup: () => ({ cells: Array(64).fill(null) }),

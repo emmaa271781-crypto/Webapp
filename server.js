@@ -884,6 +884,67 @@ io.on("connection", (socket) => {
     }
     socket.leave(roomId);
   });
+
+  // Game invite system (iMessage-style)
+  socket.on("game_invite", (payload) => {
+    if (!socket.data.authed) return;
+    const { gameType, gameId } = payload;
+    if (!gameType || !gameId) return;
+
+    const username = socket.data.username || socket.id;
+    const avatar = socket.data.avatar || '';
+
+    // Broadcast game invite as a message to all users
+    const inviteMessage = {
+      id: `invite_${gameId}`,
+      user: username,
+      avatar,
+      text: `wants to play ${gameType}`,
+      timestamp: Date.now(),
+      gameInvite: {
+        gameType,
+        gameId,
+        from: username,
+        status: 'pending',
+      },
+    };
+
+    io.emit("message", inviteMessage);
+  });
+
+  socket.on("game_accept", (payload) => {
+    if (!socket.data.authed) return;
+    const { gameId, gameType } = payload;
+    if (!gameId || !gameType) return;
+
+    // Update invite status and notify
+    io.emit("message_update", {
+      id: `invite_${gameId}`,
+      gameInvite: { status: 'accepted' },
+    });
+
+    // Start the game for both players
+    socket.emit("game_start", { gameType, gameId });
+  });
+
+  socket.on("game_decline", (payload) => {
+    if (!socket.data.authed) return;
+    const { gameId } = payload;
+    if (!gameId) return;
+
+    // Update invite status
+    io.emit("message_update", {
+      id: `invite_${gameId}`,
+      gameInvite: { status: 'declined' },
+    });
+  });
+
+  // Streak updates
+  socket.on("update_streaks", (payload) => {
+    if (!socket.data.authed) return;
+    // Store streaks (in production, use a database)
+    socket.data.streaks = payload;
+  });
   
   // Game loop function
   function startGameLoop(roomId) {

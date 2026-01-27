@@ -1,0 +1,82 @@
+.game-invite {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+  border-radius: 1rem;
+  background: var(--bg-secondary, #1a1a1a);
+  border: 1px solid var(--border-color, #333);
+  max-width: 300px;
+  margin: 0.5rem 0;
+}
+
+.game-invite.sent {
+  margin-left: auto;
+  background: var(--accent, #00d4aa);
+  color: var(--bg-primary, #0a0a0a);
+}
+
+.game-invite.received {
+  margin-right: auto;
+}
+
+.game-invite-content {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.game-invite-icon {
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.game-invite-text {
+  flex: 1;
+}
+
+.game-invite-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  margin-bottom: 0.25rem;
+}
+
+.game-invite-game {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.game-invite-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.game-invite-accept,
+.game-invite-decline {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.game-invite-accept {
+  background: var(--accent, #00d4aa);
+  color: var(--bg-primary, #0a0a0a);
+}
+
+.game-invite-decline {
+  background: var(--bg-tertiary, #2a2a2a);
+  color: var(--text-primary, #fff);
+}
+
+.game-invite-status {
+  font-size: 0.85rem;
+  opacity: 0.7;
+  text-align: center;
+  margin-top: 0.25rem;
+}

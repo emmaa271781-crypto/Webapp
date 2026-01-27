@@ -71,6 +71,35 @@
   gap: 1rem;
 }
 
+.game-card-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.game-invite-btn {
+  position: absolute;
+  top: 0.25rem;
+  right: 0.25rem;
+  background: var(--accent, #00d4aa);
+  border: none;
+  border-radius: 50%;
+  width: 2rem;
+  height: 2rem;
+  cursor: pointer;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.game-invite-btn:hover {
+  opacity: 1;
+}
+
 .game-card {
   background: var(--bg-tertiary);
   border: 2px solid var(--border-color);

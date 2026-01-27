@@ -13,7 +13,7 @@ const REALTIME_GAMES = [
   { id: 'pong', name: 'Pong', icon: '🏓' },
 ];
 
-function GameSelector({ onSelect, onClose }) {
+function GameSelector({ onSelect, onClose, socket, currentUser, onSendInvite }) {
   return (
     <motion.div
       className="game-selector-overlay"
@@ -38,16 +38,37 @@ function GameSelector({ onSelect, onClose }) {
           <h3>Turn-Based Games</h3>
           <div className="game-grid">
             {BOARDGAMES.map((game) => (
-              <motion.button
+              <motion.div
                 key={game.id}
-                className="game-card"
-                onClick={() => onSelect(game.id, 'boardgame')}
+                className="game-card-wrapper"
                 whileHover={{ scale: 1.05, y: -5 }}
                 whileTap={{ scale: 0.95 }}
               >
-                <div className="game-icon">{game.icon}</div>
-                <div className="game-name">{game.name}</div>
-              </motion.button>
+                <button
+                  className="game-card"
+                  onClick={() => onSelect(game.id, 'boardgame')}
+                >
+                  <div className="game-icon">{game.icon}</div>
+                  <div className="game-name">{game.name}</div>
+                </button>
+                {socket && currentUser && (
+                  <button
+                    className="game-invite-btn"
+                    onClick={() => {
+                      const gameId = `game_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+                      socket.emit('game_invite', {
+                        gameType: game.id,
+                        gameId,
+                      });
+                      if (onSendInvite) onSendInvite({ gameType: game.id, gameId });
+                      onClose();
+                    }}
+                    title="Send game invite in chat"
+                  >
+                    📤
+                  </button>
+                )}
+              </motion.div>
             ))}
           </div>
         </div>

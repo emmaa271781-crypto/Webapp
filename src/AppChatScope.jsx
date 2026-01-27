@@ -24,6 +24,8 @@ import TopBar from './components/TopBar';
 import Sidebar from './components/Sidebar';
 import MessageComposer from './components/MessageComposer';
 import MessageActions from './components/MessageActions';
+import GameInvite from './components/GameInvite';
+import { useStreaks } from './hooks/useStreaks';
 import './App.css';
 
 function AppChatScope() {
@@ -59,6 +61,7 @@ function AppChatScope() {
     joinCall,
     dismissBanner,
   } = useCall(socket, currentUser);
+  const { dailyStreak, gameWinStreak, totalWins, totalGames, winRate } = useStreaks(socket, currentUser);
 
   useEffect(() => {
     if (!socket) return;
@@ -188,12 +191,18 @@ function AppChatScope() {
   return (
     <div className="app" style={{ height: '100vh' }}>
       <AnimatePresence>
-        {showGameSelector && (
-          <GameSelector
-            onSelect={handleGameSelect}
-            onClose={() => setShowGameSelector(false)}
-          />
-        )}
+            {showGameSelector && (
+              <GameSelector
+                onSelect={handleGameSelect}
+                onClose={() => setShowGameSelector(false)}
+                socket={socket}
+                currentUser={currentUser}
+                onSendInvite={({ gameType, gameId }) => {
+                  // Game invite will be sent via socket and appear in chat
+                  console.log('Game invite sent:', gameType, gameId);
+                }}
+              />
+            )}
       </AnimatePresence>
       <AnimatePresence>
         {showProfileOverlay && (
@@ -269,6 +278,11 @@ function AppChatScope() {
                       >
                         🎮 Play Game
                       </button>
+                      {dailyStreak > 0 && (
+                        <span style={{ fontSize: '0.75rem', color: '#4ade80', marginRight: '0.5rem' }}>
+                          🔥 {dailyStreak} day streak
+                        </span>
+                      )}
                       <span style={{ fontSize: '0.8rem', color: '#4ade80' }}>
                         {total} online
                       </span>
@@ -325,6 +339,24 @@ function AppChatScope() {
               let fullMessageContent = messageContent;
               if (msg.replyTo) {
                 fullMessageContent = `↩ ${msg.replyTo.user}: ${msg.replyTo.text?.slice(0, 30) || '(deleted)'}\n${messageContent}`;
+              }
+
+              // Check if this is a game invite
+              if (msg.gameInvite) {
+                return (
+                  <div key={msg.id} style={{ marginBottom: '0.5rem' }}>
+                    <GameInvite
+                      message={msg}
+                      currentUser={currentUser}
+                      socket={socket}
+                      onAccept={({ gameId, gameType }) => {
+                        setGameType(gameType);
+                        setGameMode('boardgame');
+                        setShowGame(true);
+                      }}
+                    />
+                  </div>
+                );
               }
 
               return (
