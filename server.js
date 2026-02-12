@@ -161,13 +161,17 @@ if (hasVapidKeys) {
 
 app.use(express.json({ limit: "1mb" }));
 
-// Serve built React app from public directory
+// Serve static app from public directory
 const publicPath = path.join(__dirname, "public");
 app.use(express.static(publicPath, {
-  maxAge: "1h",
   etag: true,
   lastModified: true,
   index: false, // Don't auto-serve index.html from static
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
+      res.setHeader("Cache-Control", "no-store");
+    }
+  },
 }));
 
 // Log static file serving

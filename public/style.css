@@ -18,6 +18,9 @@ body {
 }
 
 .top-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -294,6 +297,10 @@ body {
 }
 
 .message-actions {
+  display: none;
+}
+
+.message.open .message-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
@@ -338,6 +345,10 @@ body {
 }
 
 .reaction-picker {
+  display: none;
+}
+
+.message.open .reaction-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;

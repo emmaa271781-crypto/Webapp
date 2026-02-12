@@ -749,10 +749,17 @@ const addChatMessage = (message) => {
     item.appendChild(reply);
   }
 
-  const text = document.createElement("p");
-  text.className = "message-text";
-  text.textContent = message.text;
-  item.appendChild(text);
+  if (message.deleted) {
+    const deleted = document.createElement("p");
+    deleted.className = "message-text";
+    deleted.textContent = "(message deleted)";
+    item.appendChild(deleted);
+  } else {
+    const text = document.createElement("p");
+    text.className = "message-text";
+    text.textContent = message.text;
+    item.appendChild(text);
+  }
 
   if (message.edited) {
     const edited = document.createElement("span");
@@ -764,73 +771,85 @@ const addChatMessage = (message) => {
   const actions = document.createElement("div");
   actions.className = "message-actions";
 
-  const replyButton = document.createElement("button");
-  replyButton.className = "action-button";
-  replyButton.textContent = "Reply";
-  replyButton.addEventListener("click", (event) => {
-    event.stopPropagation();
-    replyTarget = { id: message.id, user: message.user, text: message.text };
-    updateReplyBanner();
-    input.focus();
-  });
-  actions.appendChild(replyButton);
-
-  if (message.senderId === socket.id) {
-    const editButton = document.createElement("button");
-    editButton.className = "action-button";
-    editButton.textContent = "Edit";
-    editButton.addEventListener("click", (event) => {
+  if (!message.deleted) {
+    const replyButton = document.createElement("button");
+    replyButton.className = "action-button";
+    replyButton.textContent = "Reply";
+    replyButton.addEventListener("click", (event) => {
       event.stopPropagation();
-      editTargetId = message.id;
-      input.value = message.text || "";
-      updateEditBanner();
+      replyTarget = { id: message.id, user: message.user, text: message.text };
+      updateReplyBanner();
       input.focus();
+      item.classList.remove("open");
     });
-    actions.appendChild(editButton);
+    actions.appendChild(replyButton);
 
-    const deleteButton = document.createElement("button");
-    deleteButton.className = "action-button danger";
-    deleteButton.textContent = "Delete";
-    deleteButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      socket.emit("delete_message", { messageId: message.id });
-    });
-    actions.appendChild(deleteButton);
+    if (message.senderId === socket.id) {
+      const editButton = document.createElement("button");
+      editButton.className = "action-button";
+      editButton.textContent = "Edit";
+      editButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        editTargetId = message.id;
+        input.value = message.text || "";
+        updateEditBanner();
+        input.focus();
+        item.classList.remove("open");
+      });
+      actions.appendChild(editButton);
+
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "action-button danger";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        socket.emit("delete_message", { messageId: message.id });
+        item.classList.remove("open");
+      });
+      actions.appendChild(deleteButton);
+    }
   }
 
   const reactionBar = document.createElement("div");
   reactionBar.className = "reaction-bar";
-  if (message.reactions) {
-    Object.entries(message.reactions).forEach(([emoji, users]) => {
+  const picker = document.createElement("div");
+  picker.className = "reaction-picker";
+
+  if (!message.deleted) {
+    if (message.reactions) {
+      Object.entries(message.reactions).forEach(([emoji, users]) => {
+        const button = document.createElement("button");
+        button.className = "reaction-button";
+        if (Array.isArray(users) && users.includes(currentUser)) {
+          button.classList.add("active");
+        }
+        button.textContent = `${emoji} ${users.length}`;
+        button.addEventListener("click", (event) => {
+          event.stopPropagation();
+          socket.emit("react", { messageId: message.id, emoji });
+        });
+        reactionBar.appendChild(button);
+      });
+    }
+
+    emojiOptions.forEach((emoji) => {
       const button = document.createElement("button");
-      button.className = "reaction-button";
-      if (Array.isArray(users) && users.includes(currentUser)) {
-        button.classList.add("active");
-      }
-      button.textContent = `${emoji} ${users.length}`;
+      button.textContent = emoji;
       button.addEventListener("click", (event) => {
         event.stopPropagation();
         socket.emit("react", { messageId: message.id, emoji });
+        item.classList.remove("open");
       });
-      reactionBar.appendChild(button);
+      picker.appendChild(button);
     });
   }
 
-  const picker = document.createElement("div");
-  picker.className = "reaction-picker hidden";
-  emojiOptions.forEach((emoji) => {
-    const button = document.createElement("button");
-    button.textContent = emoji;
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      socket.emit("react", { messageId: message.id, emoji });
-      picker.classList.add("hidden");
-    });
-    picker.appendChild(button);
-  });
-
   item.addEventListener("click", () => {
-    picker.classList.toggle("hidden");
+    const alreadyOpen = item.classList.contains("open");
+    document.querySelectorAll(".message.open").forEach((node) => node.classList.remove("open"));
+    if (!alreadyOpen && !message.deleted) {
+      item.classList.add("open");
+    }
   });
 
   item.appendChild(actions);
@@ -930,6 +949,12 @@ if (jumpLatestButton) {
 if (chatScroll) {
   chatScroll.addEventListener("scroll", updateScrollState);
 }
+
+document.addEventListener("click", (event) => {
+  if (!event.target.closest(".message")) {
+    document.querySelectorAll(".message.open").forEach((node) => node.classList.remove("open"));
+  }
+});
 
 if (callStartButton) {
   callStartButton.addEventListener("click", startCall);
