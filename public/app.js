@@ -1,6 +1,8 @@
 const socket = io();
 
 const messagesList = document.getElementById("messages");
+const chatScroll = document.getElementById("chat-scroll");
+const jumpLatestButton = document.getElementById("jump-latest");
 const form = document.getElementById("message-form");
 const input = document.getElementById("message-input");
 const statusPill = document.getElementById("connection-status");
@@ -9,6 +11,13 @@ const joinForm = document.getElementById("join-form");
 const usernameInput = document.getElementById("username");
 const passwordInput = document.getElementById("password");
 const joinError = document.getElementById("join-error");
+const replyBanner = document.getElementById("reply-banner");
+const replyText = document.getElementById("reply-text");
+const replyCancel = document.getElementById("reply-cancel");
+const editBanner = document.getElementById("edit-banner");
+const editText = document.getElementById("edit-text");
+const editCancel = document.getElementById("edit-cancel");
+const themeToggle = document.getElementById("theme-toggle");
 const callStartButton = document.getElementById("call-start");
 const callEndButton = document.getElementById("call-end");
 const callJoinButton = document.getElementById("call-join");
@@ -60,6 +69,10 @@ let iceServers = [
   { urls: "stun:stun4.l.google.com:19302" },
 ];
 const maxReconnectAttempts = 3;
+let isAtBottom = true;
+let replyTarget = null;
+let editTargetId = null;
+const emojiOptions = ["👍", "❤️", "😂", "😮", "😢", "🎉", "🔥", "👏"];
 
 const setStatus = (label, type) => {
   statusPill.textContent = label;
@@ -647,7 +660,51 @@ const formatTime = (isoString) => {
 };
 
 const scrollToBottom = () => {
-  messagesList.scrollTop = messagesList.scrollHeight;
+  if (!chatScroll) return;
+  chatScroll.scrollTop = chatScroll.scrollHeight;
+  updateScrollState();
+};
+
+const updateScrollState = () => {
+  if (!chatScroll || !jumpLatestButton) return;
+  const distance = chatScroll.scrollHeight - chatScroll.scrollTop - chatScroll.clientHeight;
+  isAtBottom = distance < 140;
+  jumpLatestButton.classList.toggle("hidden", isAtBottom);
+};
+
+const updateReplyBanner = () => {
+  if (!replyBanner) return;
+  if (!replyTarget) {
+    replyBanner.classList.add("hidden");
+    return;
+  }
+  replyBanner.classList.remove("hidden");
+  if (replyText) {
+    replyText.textContent = `${replyTarget.user}: ${replyTarget.text || ""}`.slice(0, 80);
+  }
+};
+
+const updateEditBanner = () => {
+  if (!editBanner) return;
+  if (!editTargetId) {
+    editBanner.classList.add("hidden");
+    return;
+  }
+  editBanner.classList.remove("hidden");
+  if (editText) {
+    const message = messagesById.get(editTargetId);
+    editText.textContent = message?.text?.slice(0, 80) || "message";
+  }
+};
+
+const clearReplyTarget = () => {
+  replyTarget = null;
+  updateReplyBanner();
+};
+
+const clearEditTarget = () => {
+  editTargetId = null;
+  updateEditBanner();
 };
 
 const addSystemMessage = (text) => {
@@ -658,9 +715,13 @@ const addSystemMessage = (text) => {
   scrollToBottom();
 };
 
+const messagesById = new Map();
+
 const addChatMessage = (message) => {
+  messagesById.set(message.id, message);
   const item = document.createElement("li");
   item.className = "message";
+  item.dataset.id = message.id;
   if (message.user === currentUser) {
     item.classList.add("self");
   }
@@ -679,14 +740,118 @@ const addChatMessage = (message) => {
   meta.appendChild(user);
   meta.appendChild(time);
 
+  item.appendChild(meta);
+
+  if (message.replyTo) {
+    const reply = document.createElement("div");
+    reply.className = "reply-preview";
+    reply.innerHTML = `<strong>${message.replyTo.user}</strong> ${message.replyTo.text}`;
+    item.appendChild(reply);
+  }
+
   const text = document.createElement("p");
   text.className = "message-text";
   text.textContent = message.text;
-
-  item.appendChild(meta);
   item.appendChild(text);
+
+  if (message.edited) {
+    const edited = document.createElement("span");
+    edited.className = "edited-label";
+    edited.textContent = "(edited)";
+    meta.appendChild(edited);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "message-actions";
+
+  const replyButton = document.createElement("button");
+  replyButton.className = "action-button";
+  replyButton.textContent = "Reply";
+  replyButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    replyTarget = { id: message.id, user: message.user, text: message.text };
+    updateReplyBanner();
+    input.focus();
+  });
+  actions.appendChild(replyButton);
+
+  if (message.senderId === socket.id) {
+    const editButton = document.createElement("button");
+    editButton.className = "action-button";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      editTargetId = message.id;
+      input.value = message.text || "";
+      updateEditBanner();
+      input.focus();
+    });
+    actions.appendChild(editButton);
+
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "action-button danger";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", (event) => {
+      event.stopPropagation();
+      socket.emit("delete_message", { messageId: message.id });
+    });
+    actions.appendChild(deleteButton);
+  }
+
+  const reactionBar = document.createElement("div");
+  reactionBar.className = "reaction-bar";
+  if (message.reactions) {
+    Object.entries(message.reactions).forEach(([emoji, users]) => {
+      const button = document.createElement("button");
+      button.className = "reaction-button";
+      if (Array.isArray(users) && users.includes(currentUser)) {
+        button.classList.add("active");
+      }
+      button.textContent = `${emoji} ${users.length}`;
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        socket.emit("react", { messageId: message.id, emoji });
+      });
+      reactionBar.appendChild(button);
+    });
+  }
+
+  const picker = document.createElement("div");
+  picker.className = "reaction-picker hidden";
+  emojiOptions.forEach((emoji) => {
+    const button = document.createElement("button");
+    button.textContent = emoji;
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      socket.emit("react", { messageId: message.id, emoji });
+      picker.classList.add("hidden");
+    });
+    picker.appendChild(button);
+  });
+
+  item.addEventListener("click", () => {
+    picker.classList.toggle("hidden");
+  });
+
+  item.appendChild(actions);
+  item.appendChild(reactionBar);
+  item.appendChild(picker);
   messagesList.appendChild(item);
-  scrollToBottom();
+  if (isAtBottom) {
+    scrollToBottom();
+  } else if (jumpLatestButton) {
+    jumpLatestButton.classList.remove("hidden");
+  }
+};
+
+const upsertMessage = (message) => {
+  if (!message?.id) return;
+  messagesById.set(message.id, message);
+  const existing = messagesList.querySelector(`.message[data-id="${message.id}"]`);
+  if (existing) {
+    existing.remove();
+  }
+  addChatMessage(message);
 };
 
 const setJoinError = (message) => {
@@ -729,13 +894,42 @@ form.addEventListener("submit", (event) => {
     openOverlay();
     return;
   }
+  if (editTargetId) {
+    if (text) {
+      socket.emit("edit_message", { messageId: editTargetId, text });
+      clearEditTarget();
+    }
+    input.value = "";
+    input.focus();
+    return;
+  }
   if (!text) {
     return;
   }
-  socket.emit("message", { text });
+  socket.emit("message", {
+    text,
+    replyTo: replyTarget ? { id: replyTarget.id } : null,
+  });
+  clearReplyTarget();
   input.value = "";
   input.focus();
 });
+
+if (replyCancel) {
+  replyCancel.addEventListener("click", clearReplyTarget);
+}
+if (editCancel) {
+  editCancel.addEventListener("click", clearEditTarget);
+}
+if (jumpLatestButton) {
+  jumpLatestButton.addEventListener("click", () => {
+    scrollToBottom();
+    updateScrollState();
+  });
+}
+if (chatScroll) {
+  chatScroll.addEventListener("scroll", updateScrollState);
+}
 
 if (callStartButton) {
   callStartButton.addEventListener("click", startCall);
@@ -788,6 +982,27 @@ socket.on("disconnect", () => {
   }
 });
 
+const applyTheme = (theme) => {
+  if (theme === "dark") {
+    document.body.classList.add("theme-dark");
+    if (themeToggle) themeToggle.textContent = "Light mode";
+  } else {
+    document.body.classList.remove("theme-dark");
+    if (themeToggle) themeToggle.textContent = "Dark mode";
+  }
+};
+
+const savedTheme = localStorage.getItem("theme") || "dark";
+applyTheme(savedTheme);
+
+if (themeToggle) {
+  themeToggle.addEventListener("click", () => {
+    const nextTheme = document.body.classList.contains("theme-dark") ? "light" : "dark";
+    localStorage.setItem("theme", nextTheme);
+    applyTheme(nextTheme);
+  });
+}
+
 socket.on("auth_ok", (payload) => {
   currentUser = payload?.username || "";
   if (localLabel) {
@@ -795,6 +1010,9 @@ socket.on("auth_ok", (payload) => {
   }
   closeOverlay();
   setJoinError("");
+  if (messagesById.size) {
+    messagesById.forEach((message) => upsertMessage(message));
+  }
 });
 
 socket.on("auth_error", (message) => {
@@ -806,15 +1024,29 @@ socket.on("auth_error", (message) => {
 
 socket.on("history", (messages) => {
   messagesList.innerHTML = "";
+  messagesById.clear();
   if (!messages.length) {
     addSystemMessage("No messages yet. Start the conversation!");
     return;
   }
   messages.forEach(addChatMessage);
+  scrollToBottom();
+  updateScrollState();
 });
 
 socket.on("message", (message) => {
   addChatMessage(message);
+});
+
+socket.on("message_update", (message) => {
+  upsertMessage(message);
+});
+
+socket.on("reaction_update", (payload) => {
+  const message = messagesById.get(payload?.messageId);
+  if (!message) return;
+  message.reactions = payload.reactions || {};
+  upsertMessage(message);
 });
 
 socket.on("system", (text) => {

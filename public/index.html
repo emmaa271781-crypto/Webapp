@@ -14,6 +14,7 @@
           <span id="connection-status" class="status-pill">Connecting...</span>
         </div>
         <div class="top-actions">
+          <button id="theme-toggle" class="header-button">Light mode</button>
           <button id="call-start" class="header-button">Start Call</button>
           <button id="call-end" class="header-button danger" disabled>End Call</button>
         </div>
@@ -61,9 +62,19 @@
         </div>
       </section>
 
-      <main class="chat">
+      <main class="chat" id="chat-scroll">
+        <button id="jump-latest" class="jump-latest hidden" type="button">Jump to latest</button>
         <ul id="messages" class="messages"></ul>
       </main>
+
+      <div id="reply-banner" class="banner hidden">
+        <span>Replying to <strong id="reply-text"></strong></span>
+        <button id="reply-cancel" type="button">✕</button>
+      </div>
+      <div id="edit-banner" class="banner hidden">
+        <span>Editing <strong id="edit-text"></strong></span>
+        <button id="edit-cancel" type="button">✕</button>
+      </div>
 
       <form id="message-form" class="composer" autocomplete="off">
         <input
