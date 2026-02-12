@@ -3,24 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Classroom CS</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-      rel="stylesheet"
-    />
+    <title>Classroom Chat</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="app">
       <header class="top-bar">
         <div class="top-left">
-          <h1>Classroom CS</h1>
+          <h1>Classroom Chat</h1>
           <span id="connection-status" class="status-pill">Connecting...</span>
         </div>
         <div class="top-actions">
-          <button id="game-toggle" class="header-button">Play Game</button>
+          <button id="theme-toggle" class="header-button">Light mode</button>
           <button id="call-start" class="header-button">Start Call</button>
           <button id="call-end" class="header-button danger" disabled>End Call</button>
         </div>
@@ -49,7 +43,7 @@
               <video id="local-video" class="call-video hidden" autoplay muted playsinline></video>
               <div id="local-placeholder" class="call-placeholder">Camera off</div>
             </div>
-            <div id="local-status" class="call-substatus">Mic muted • Camera off</div>
+            <div id="local-status" class="call-substatus">Mic muted</div>
           </div>
           <div class="call-tile">
             <div id="remote-label" class="call-label">Remote</div>
@@ -81,30 +75,6 @@
         <span>Editing <strong id="edit-text"></strong></span>
         <button id="edit-cancel" type="button">✕</button>
       </div>
-      <div id="file-banner" class="banner hidden">
-        <span>Attachment: <strong id="file-name"></strong></span>
-        <button id="file-cancel" type="button">✕</button>
-      </div>
-
-      <div class="composer-tools">
-        <div class="tool-buttons">
-          <button id="emoji-toggle" class="tool-button" type="button">😊</button>
-          <button id="gif-toggle" class="tool-button" type="button">GIF</button>
-          <button id="attach-toggle" class="tool-button" type="button">📎</button>
-        </div>
-        <span id="composer-error" class="composer-error"></span>
-      </div>
-
-      <div id="emoji-panel" class="panel hidden"></div>
-      <div id="gif-panel" class="panel hidden">
-        <div class="panel-title">GIF Search</div>
-        <div class="gif-search">
-          <input id="gif-input" type="text" placeholder="Search GIFs" />
-          <button id="gif-search" type="button">Search</button>
-        </div>
-        <div id="gif-results" class="gif-results"></div>
-        <p id="gif-error" class="error"></p>
-      </div>
 
       <form id="message-form" class="composer" autocomplete="off">
         <input
@@ -116,24 +86,6 @@
         />
         <button type="submit">Send</button>
       </form>
-    </div>
-
-    <div id="game-overlay" class="game-overlay hidden">
-      <div class="game-card">
-        <div class="game-header">
-          <div>
-            <div class="game-title">Pong</div>
-            <div id="game-status" class="game-status">Connecting...</div>
-          </div>
-          <button id="game-close" class="header-button danger" type="button">Close</button>
-        </div>
-        <div id="game-score" class="game-score">0 : 0</div>
-        <canvas id="game-canvas" width="800" height="500"></canvas>
-        <div class="game-controls">
-          <button id="game-up" class="game-control" type="button">▲</button>
-          <button id="game-down" class="game-control" type="button">▼</button>
-        </div>
-      </div>
     </div>
 
     <div id="join-overlay" class="overlay">
@@ -158,8 +110,6 @@
         <button type="submit">Enter chat</button>
       </form>
     </div>
-
-    <input id="file-input" type="file" accept="image/*,video/*" hidden />
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="https://unpkg.com/simple-peer@9.11.1/simplepeer.min.js"></script>
