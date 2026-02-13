@@ -18,6 +18,9 @@ const editBanner = document.getElementById("edit-banner");
 const editText = document.getElementById("edit-text");
 const editCancel = document.getElementById("edit-cancel");
 const themeToggle = document.getElementById("theme-toggle");
+const attachButton = document.getElementById("attach-button");
+const fileInput = document.getElementById("file-input");
+const composerError = document.getElementById("composer-error");
 const callStartButton = document.getElementById("call-start");
 const callEndButton = document.getElementById("call-end");
 const callJoinButton = document.getElementById("call-join");
@@ -707,6 +710,11 @@ const clearEditTarget = () => {
   updateEditBanner();
 };
 
+const showComposerError = (message) => {
+  if (!composerError) return;
+  composerError.textContent = message || "";
+};
+
 const addSystemMessage = (text) => {
   const item = document.createElement("li");
   item.className = "message system";
@@ -754,6 +762,21 @@ const addChatMessage = (message) => {
     deleted.className = "message-text";
     deleted.textContent = "(message deleted)";
     item.appendChild(deleted);
+  } else if (message.type === "file" && message.file?.url) {
+    const media = document.createElement("div");
+    media.className = "message-media";
+    if (message.file.kind === "video") {
+      const video = document.createElement("video");
+      video.controls = true;
+      video.src = message.file.url;
+      media.appendChild(video);
+    } else {
+      const img = document.createElement("img");
+      img.src = message.file.url;
+      img.alt = message.file.name || "attachment";
+      media.appendChild(img);
+    }
+    item.appendChild(media);
   } else {
     const text = document.createElement("p");
     text.className = "message-text";
@@ -950,6 +973,51 @@ if (chatScroll) {
   chatScroll.addEventListener("scroll", updateScrollState);
 }
 
+if (attachButton && fileInput) {
+  attachButton.addEventListener("click", () => {
+    fileInput.click();
+  });
+}
+
+if (fileInput) {
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") && !file.type.startsWith("video/")) {
+      showComposerError("Only images or videos are allowed.");
+      fileInput.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const url = String(reader.result || "");
+      if (!url.startsWith("data:") || url.length > 4_500_000) {
+        showComposerError("Attachment too large.");
+        fileInput.value = "";
+        return;
+      }
+      socket.emit("message", {
+        type: "file",
+        file: {
+          url,
+          name: file.name || "attachment",
+          mime: file.type,
+          kind: file.type.startsWith("video/") ? "video" : "image",
+        },
+        replyTo: replyTarget ? { id: replyTarget.id } : null,
+      });
+      clearReplyTarget();
+      fileInput.value = "";
+      showComposerError("");
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+if (input) {
+  input.addEventListener("input", () => showComposerError(""));
+}
+
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".message")) {
     document.querySelectorAll(".message.open").forEach((node) => node.classList.remove("open"));
@@ -1017,13 +1085,30 @@ const applyTheme = (theme) => {
   }
 };
 
-const savedTheme = localStorage.getItem("theme") || "dark";
+const readStoredTheme = () => {
+  try {
+    return localStorage.getItem("theme");
+  } catch (err) {
+    return null;
+  }
+};
+
+const writeStoredTheme = (value) => {
+  try {
+    localStorage.setItem("theme", value);
+  } catch (err) {
+    // ignore
+  }
+};
+
+const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+const savedTheme = readStoredTheme() || (prefersDark ? "dark" : "light");
 applyTheme(savedTheme);
 
 if (themeToggle) {
   themeToggle.addEventListener("click", () => {
     const nextTheme = document.body.classList.contains("theme-dark") ? "light" : "dark";
-    localStorage.setItem("theme", nextTheme);
+    writeStoredTheme(nextTheme);
     applyTheme(nextTheme);
   });
 }

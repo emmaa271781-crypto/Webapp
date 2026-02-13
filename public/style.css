@@ -76,6 +76,12 @@ body {
   cursor: not-allowed;
 }
 
+.composer-error {
+  margin: 0 1.5rem 0.75rem;
+  font-size: 0.85rem;
+  color: #b91c1c;
+}
+
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -355,6 +361,10 @@ body {
   margin-top: 0.35rem;
 }
 
+.message.open .reaction-bar {
+  display: none;
+}
+
 .reaction-picker button {
   border: 1px solid #d1d5db;
   background: #ffffff;
@@ -390,6 +400,19 @@ body {
   margin: 0;
   font-size: 0.95rem;
   line-height: 1.4;
+}
+
+.message-media {
+  margin-top: 0.5rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.message-media img,
+.message-media video {
+  max-width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid #e5e7eb;
 }
 
 .composer {
@@ -609,4 +632,13 @@ body.theme-dark .composer button {
   background: #22c55e;
   border-color: #22c55e;
   color: #0b1117;
+}
+
+body.theme-dark .message-media img,
+body.theme-dark .message-media video {
+  border-color: #1f2937;
+}
+
+body.theme-dark .composer-error {
+  color: #fca5a5;
 }
